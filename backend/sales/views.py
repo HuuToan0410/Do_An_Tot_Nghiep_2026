@@ -241,8 +241,13 @@ class ListingDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class AppointmentListView(generics.ListCreateAPIView):
     serializer_class = AppointmentSerializer
-    permission_classes = [CanManageAppointment]
+    """ permission_classes = [CanManageAppointment] """
 
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [permissions.IsAuthenticated()]   # cho khách tạo
+        return [CanManageAppointment()] 
+    
     def get_queryset(self):
         qs = Appointment.objects.select_related("vehicle", "customer", "handled_by")
         if self.request.user.role == "CUSTOMER":

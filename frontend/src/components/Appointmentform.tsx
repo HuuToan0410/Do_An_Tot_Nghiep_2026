@@ -74,7 +74,7 @@ interface Props {
 
 export default function AppointmentForm({ vehicleId, vehicleName }: Props) {
   const user = useAuthStore((s) => s.user);
-
+  const token = useAuthStore((s) => s.token);
   const [form, setForm] = useState<FormState>({
     customer_name: user
       ? `${user.first_name ?? ""} ${user.last_name ?? ""}`.trim()
@@ -105,8 +105,18 @@ export default function AppointmentForm({ vehicleId, vehicleName }: Props) {
     return Object.keys(e).length === 0;
   }
 
-  function handleSubmit() {
+    function handleSubmit() {
+    
+    if (!token) {
+      setErrors((prev) => ({
+        ...prev,
+        customer_name: "Bạn cần đăng nhập hoặc tạo tài khoản để đặt lịch",
+      }));
+      return;
+    }
+
     if (!validate()) return;
+
     mut.mutate({
       vehicle: vehicleId,
       customer_name: form.customer_name.trim(),
