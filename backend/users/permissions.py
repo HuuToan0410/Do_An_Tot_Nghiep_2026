@@ -1,44 +1,111 @@
 from rest_framework.permissions import BasePermission
-from users.models import User
+from .models import User
 
 
 class IsAdmin(BasePermission):
-    """
-    Chỉ cho phép Quản trị viên truy cập.
-
-    Permission này được sử dụng cho các API quản trị hệ thống
-    như quản lý người dùng, cấu hình hệ thống, thống kê tổng.
-    """
-
-    message = "Chỉ quản trị viên mới có quyền truy cập."
+    """Chỉ quản trị viên"""
+    message = "Bạn không có quyền thực hiện thao tác này."
 
     def has_permission(self, request, view):
-        user = request.user
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role == User.Role.ADMIN
+        )
 
-        return user and user.is_authenticated and user.role == User.Role.ADMIN
 
-
-class IsStaffOrAdmin(BasePermission):
-    """
-    Cho phép các nhân sự nội bộ truy cập.
-
-    Bao gồm:
-    - Quản trị viên
-    - Nhân viên bán hàng
-    - Nhân viên kiểm định
-    - Kỹ thuật viên
-    """
-
-    message = "Bạn không có quyền truy cập chức năng này."
-
-    ALLOWED_ROLES = {
-        User.Role.ADMIN,
-        User.Role.SALES,
-        User.Role.INSPECTOR,
-        User.Role.TECHNICIAN,
-    }
+class IsStaffMember(BasePermission):
+    """Nhân viên nội bộ (không phải khách hàng)"""
+    message = "Chỉ nhân viên nội bộ mới có quyền truy cập."
 
     def has_permission(self, request, view):
-        user = request.user
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role != User.Role.CUSTOMER
+        )
 
-        return user and user.is_authenticated and user.role in self.ALLOWED_ROLES
+
+class IsPurchasing(BasePermission):
+    """Nhân viên thu mua"""
+    message = "Chỉ nhân viên thu mua mới có quyền thực hiện."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role in [User.Role.PURCHASING, User.Role.ADMIN]
+        )
+
+
+class IsInspector(BasePermission):
+    """Kỹ thuật viên kiểm định"""
+    message = "Chỉ kỹ thuật viên kiểm định mới có quyền thực hiện."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role in [User.Role.INSPECTOR, User.Role.ADMIN]
+        )
+
+
+class IsTechnician(BasePermission):
+    """Kỹ thuật viên tân trang"""
+    message = "Chỉ kỹ thuật viên tân trang mới có quyền thực hiện."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role in [User.Role.TECHNICIAN, User.Role.ADMIN]
+        )
+
+
+class IsPricing(BasePermission):
+    """Nhân viên định giá"""
+    message = "Chỉ nhân viên định giá mới có quyền thực hiện."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role in [User.Role.PRICING, User.Role.ADMIN]
+        )
+
+
+class IsSales(BasePermission):
+    """Nhân viên bán hàng"""
+    message = "Chỉ nhân viên bán hàng mới có quyền thực hiện."
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role in [User.Role.SALES, User.Role.ADMIN]
+        )
+
+
+class IsOwnerOrAdmin(BasePermission):
+    """Chủ sở hữu hoặc admin"""
+    message = "Bạn chỉ có thể thao tác trên tài nguyên của mình."
+
+    def has_object_permission(self, request, view, obj):
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            (obj == request.user or request.user.role == User.Role.ADMIN)
+        )
+
+
+class IsAdminOrReadOnly(BasePermission):
+    """Admin toàn quyền, còn lại chỉ đọc"""
+
+    def has_permission(self, request, view):
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return bool(request.user and request.user.is_authenticated)
+        return bool(
+            request.user and
+            request.user.is_authenticated and
+            request.user.role == User.Role.ADMIN
+        )

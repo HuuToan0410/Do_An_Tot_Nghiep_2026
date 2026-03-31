@@ -1,96 +1,39 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+
 from .models import User
 
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
-    """
-    Cấu hình trang quản trị cho model User
-    """
-
-    # các cột hiển thị trong bảng danh sách
-    list_display = (
-        "id",
+class UserAdmin(BaseUserAdmin):
+    list_display = [
         "username",
         "email",
-        "phone",
-        "vai_tro",
-        "is_staff",
-        "is_active",
-        "created_at",
-    )
-
-    # bộ lọc bên phải
-    list_filter = (
+        "get_full_name",
         "role",
-        "is_staff",
-        "is_active",
-        "created_at",
-    )
-
-    # tìm kiếm nhanh
-    search_fields = (
-        "username",
-        "email",
         "phone",
-    )
-
-    # sắp xếp mặc định
-    ordering = ("-created_at",)
-
-    # tránh load toàn bộ object
-    list_select_related = ()
-
-    # số dòng mỗi trang
-    list_per_page = 25
-
-    # field chỉ đọc
-    readonly_fields = (
+        "is_active",
+        "is_verified",
         "created_at",
-        "updated_at",
-    )
+    ]
+    list_filter = ["role", "is_active", "is_verified"]
+    search_fields = ["username", "email", "phone", "first_name", "last_name"]
+    ordering = ["-created_at"]
 
-    # tổ chức form admin
-    fieldsets = (
-        ("Thông tin đăng nhập", {"fields": ("username", "password")}),
-        ("Thông tin cá nhân", {"fields": ("email", "phone")}),
+    fieldsets = BaseUserAdmin.fieldsets + (
         (
-            "Vai trò & quyền hạn",
+            "Thông tin bổ sung",
             {
-                "fields": (
-                    "role",
-                    "is_staff",
-                    "is_active",
-                    "is_superuser",
-                    "groups",
-                    "user_permissions",
-                )
-            },
-        ),
-        ("Thời gian hệ thống", {"fields": ("created_at", "updated_at")}),
-    )
-
-    # khi tạo user mới
-    add_fieldsets = (
-        (
-            "Tạo người dùng mới",
-            {
-                "classes": ("wide",),
-                "fields": (
-                    "username",
-                    "email",
-                    "phone",
-                    "role",
-                    "password1",
-                    "password2",
-                    "is_staff",
-                    "is_active",
-                ),
+                "fields": ("role", "phone", "address", "avatar", "is_verified"),
             },
         ),
     )
 
-    # hiển thị tiếng việt cho role
-    @admin.display(description="Vai trò")
-    def vai_tro(self, obj):
-        return obj.get_role_display()
+    add_fieldsets = BaseUserAdmin.add_fieldsets + (
+        (
+            "Thông tin bổ sung",
+            {
+                "fields": ("role", "phone", "email"),
+            },
+        ),
+    )

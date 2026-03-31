@@ -1,61 +1,88 @@
 from django.db import transaction
+
 from vehicles.models import VehicleUnit, VehicleStatusLog
+
+
+# ── Workflow transition map ────────────────────────────────────
+# Khớp với WORKFLOW_TRANSITIONS trong api/workflow.ts
+ALLOWED_TRANSITIONS: dict[str, list[str]] = {
+    "PURCHASED":       ["WAIT_INSPECTION"],
+    "WAIT_INSPECTION": ["INSPECTING"],
+    "INSPECTING":      ["INSPECTED", "WAIT_INSPECTION"],   # có thể trả lại
+    "INSPECTED":       ["WAIT_REFURBISH", "READY_FOR_SALE"],
+    "WAIT_REFURBISH":  ["REFURBISHING"],
+    "REFURBISHING":    ["READY_FOR_SALE"],
+    "READY_FOR_SALE":  ["LISTED"],
+    "LISTED":          ["RESERVED", "READY_FOR_SALE"],     # có thể hủy đăng
+    "RESERVED":        ["SOLD", "LISTED"],                 # hủy cọc → về LISTED
+    "SOLD":            ["WARRANTY"],
+    "WARRANTY":        [],
+}
+
+# Role nào được phép thực hiện transition nào (tùy chỉnh theo yêu cầu)
+ROLE_ALLOWED_FROM: dict[str, list[str]] = {
+    "PURCHASING":  ["PURCHASED"],
+    "INSPECTOR":   ["WAIT_INSPECTION", "INSPECTING"],
+    "TECHNICIAN":  ["WAIT_REFURBISH", "REFURBISHING"],
+    "PRICING":     ["INSPECTED"],
+    "SALES":       ["READY_FOR_SALE", "LISTED", "RESERVED", "SOLD"],
+    "ADMIN":       list(ALLOWED_TRANSITIONS.keys()),       # admin được tất cả
+}
 
 
 class VehicleStatusService:
     """
-    Service quản lý thay đổi trạng thái xe.
-
-    Chức năng:
-    - Kiểm tra trạng thái hợp lệ
-    - Cập nhật trạng thái xe
-    - Ghi log lịch sử trạng thái
+    Service duy nhất xử lý chuyển trạng thái xe.
+    Đảm bảo toàn vẹn dữ liệu và ghi log đầy đủ.
     """
 
-    # Quy định luồng trạng thái hợp lệ
-    ALLOWED_TRANSITIONS = {
-        VehicleUnit.Status.MOI_NHAP: [VehicleUnit.Status.CHO_KIEM_DINH],
-        VehicleUnit.Status.CHO_KIEM_DINH: [VehicleUnit.Status.DA_KIEM_DINH],
-        VehicleUnit.Status.DA_KIEM_DINH: [VehicleUnit.Status.SAN_SANG_BAN],
-        VehicleUnit.Status.SAN_SANG_BAN: [VehicleUnit.Status.DANG_BAN],
-        VehicleUnit.Status.DANG_BAN: [VehicleUnit.Status.DA_BAN],
-    }
+    @classmethod
+    def can_transition(cls, user, from_status: str, to_status: str) -> bool:
+        """Kiểm tra user có quyền thực hiện transition này không."""
+        role = getattr(user, "role", "ADMIN")
+        allowed_from = ROLE_ALLOWED_FROM.get(role, [])
+
+        # Admin bypass role check
+        if role == "ADMIN":
+            return to_status in ALLOWED_TRANSITIONS.get(from_status, [])
+
+        if from_status not in allowed_from:
+            return False
+        return to_status in ALLOWED_TRANSITIONS.get(from_status, [])
 
     @classmethod
-    def change_status(cls, vehicle: VehicleUnit, new_status: str, user, note: str = ""):
+    def change_status(
+        cls,
+        vehicle: VehicleUnit,
+        new_status: str,
+        user,
+        note: str = "",
+    ) -> VehicleUnit:
         """
-        Thay đổi trạng thái xe và ghi log.
-
-        Args:
-            vehicle: đối tượng VehicleUnit
-            new_status: trạng thái mới
-            user: người thực hiện thay đổi
-            note: ghi chú
-
-        Returns:
-            VehicleUnit
+        Chuyển trạng thái xe + ghi VehicleStatusLog.
 
         Raises:
-            ValueError nếu trạng thái không hợp lệ
+            ValueError: nếu transition không hợp lệ
+            PermissionError: nếu user không có quyền
         """
-
         old_status = vehicle.status
 
-        # Nếu trạng thái giống nhau thì không làm gì
         if old_status == new_status:
             return vehicle
 
-        # Kiểm tra chuyển trạng thái hợp lệ
-        allowed = cls.ALLOWED_TRANSITIONS.get(old_status, [])
-
-        if new_status not in allowed:
+        # Kiểm tra workflow
+        if new_status not in ALLOWED_TRANSITIONS.get(old_status, []):
             raise ValueError(
-                f"Không thể chuyển trạng thái từ {old_status} sang {new_status}"
+                f"Không thể chuyển trạng thái từ '{old_status}' sang '{new_status}'."
             )
 
-        # Transaction đảm bảo tính toàn vẹn dữ liệu
-        with transaction.atomic():
+        # Kiểm tra role
+        if not cls.can_transition(user, old_status, new_status):
+            raise PermissionError(
+                f"Bạn không có quyền thực hiện thao tác này."
+            )
 
+        with transaction.atomic():
             vehicle.status = new_status
             vehicle.save(update_fields=["status", "updated_at"])
 
@@ -64,7 +91,7 @@ class VehicleStatusService:
                 old_status=old_status,
                 new_status=new_status,
                 changed_by=user,
-                note=note,
+                note=note or "",
             )
 
         return vehicle

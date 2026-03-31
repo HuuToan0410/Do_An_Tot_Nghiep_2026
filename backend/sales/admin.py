@@ -1,158 +1,131 @@
 from django.contrib import admin
-from .models import Pricing, Listing, Deposit, SalesOrder
+from sales.models import (
+    Appointment,
+    AuditLog,
+    Deposit,
+    HandoverRecord,
+    Listing,
+    VehiclePricing,
+    SalesOrder,
+    WarrantyRecord,
+)
 
 
-@admin.register(Pricing)
+@admin.register(VehiclePricing)
 class PricingAdmin(admin.ModelAdmin):
-    """
-    Quản trị thông tin định giá xe
-    """
-
-    list_display = (
+    list_display = [
         "vehicle",
         "purchase_price",
         "refurbish_cost",
-        "suggested_price",
+        "target_price",
         "approved_price",
         "approved_by",
-        "created_at",
-    )
-
-    list_filter = (
-        "approved_by",
-        "created_at",
-    )
-
-    search_fields = (
-        "vehicle__vin",
-        "vehicle__brand",
-        "vehicle__model",
-    )
-
-    ordering = ("-created_at",)
-
-    list_select_related = (
-        "vehicle",
-        "approved_by",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )
+        "approved_at",
+    ]
+    list_filter = ["approved_by"]
+    search_fields = ["vehicle__brand", "vehicle__model", "vehicle__vin"]
+    readonly_fields = ["created_at", "updated_at", "approved_at"]
 
 
 @admin.register(Listing)
 class ListingAdmin(admin.ModelAdmin):
-    """
-    Quản trị bài đăng bán xe
-    """
-
-    list_display = (
+    list_display = [
         "title",
         "vehicle",
         "listed_price",
         "is_active",
+        "is_featured",
         "views_count",
         "created_at",
-    )
-
-    list_filter = (
-        "is_active",
-        "created_at",
-    )
-
-    search_fields = (
-        "title",
-        "vehicle__brand",
-        "vehicle__model",
-        "vehicle__vin",
-    )
-
-    ordering = ("-created_at",)
-
-    list_select_related = ("vehicle",)
-
+    ]
+    list_filter = ["is_active", "is_featured"]
+    search_fields = ["title", "vehicle__brand", "vehicle__model"]
+    readonly_fields = ["views_count", "created_at", "updated_at"]
     prepopulated_fields = {"slug": ("title",)}
 
-    readonly_fields = (
-        "views_count",
-        "created_at",
-        "updated_at",
-    )
+
+@admin.register(Appointment)
+class AppointmentAdmin(admin.ModelAdmin):
+    list_display = [
+        "customer_name",
+        "customer_phone",
+        "vehicle",
+        "scheduled_at",
+        "status",
+        "handled_by",
+    ]
+    list_filter = ["status"]
+    search_fields = ["customer_name", "customer_phone", "vehicle__brand"]
+    ordering = ["scheduled_at"]
 
 
 @admin.register(Deposit)
 class DepositAdmin(admin.ModelAdmin):
-    """
-    Quản trị đặt cọc xe
-    """
-
-    list_display = (
+    list_display = [
+        "customer_name",
+        "customer_phone",
         "vehicle",
-        "customer",
         "amount",
-        "confirmed",
+        "status",
+        "confirmed_by",
         "created_at",
-    )
-
-    list_filter = (
-        "confirmed",
-        "created_at",
-    )
-
-    search_fields = (
-        "vehicle__vin",
-        "vehicle__brand",
-        "customer__username",
-        "customer__phone",
-    )
-
-    ordering = ("-created_at",)
-
-    list_select_related = (
-        "vehicle",
-        "customer",
-    )
-
-    readonly_fields = (
-        "created_at",
-        "updated_at",
-    )
+    ]
+    list_filter = ["status"]
+    search_fields = ["customer_name", "vehicle__brand", "vehicle__vin"]
+    readonly_fields = ["created_at", "updated_at"]
 
 
 @admin.register(SalesOrder)
 class SalesOrderAdmin(admin.ModelAdmin):
-    """
-    Quản trị đơn bán xe
-    """
-
-    list_display = (
+    list_display = [
+        "contract_number",
         "vehicle",
-        "customer",
+        "customer_name",
         "sale_price",
-        "contract_number",
+        "sold_by",
         "sold_at",
-    )
+    ]
+    search_fields = ["contract_number", "customer_name", "vehicle__vin"]
+    readonly_fields = ["sold_at"]
 
-    list_filter = ("sold_at",)
 
-    search_fields = (
-        "contract_number",
-        "vehicle__vin",
-        "vehicle__brand",
-        "customer__username",
-    )
+@admin.register(HandoverRecord)
+class HandoverAdmin(admin.ModelAdmin):
+    list_display = ["sales_order", "handover_date", "mileage_at_handover", "staff"]
+    readonly_fields = ["created_at"]
 
-    ordering = ("-sold_at",)
 
-    list_select_related = (
-        "vehicle",
-        "customer",
-    )
+@admin.register(WarrantyRecord)
+class WarrantyAdmin(admin.ModelAdmin):
+    list_display = [
+        "sales_order",
+        "status",
+        "warranty_months",
+        "start_date",
+        "end_date",
+    ]
+    list_filter = ["status"]
+    readonly_fields = ["created_at"]
 
-    readonly_fields = (
-        "sold_at",
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = [
+        "user",
+        "action",
+        "model_name",
+        "object_id",
+        "description",
+        "ip_address",
         "created_at",
-        "updated_at",
-    )
+    ]
+    list_filter = ["action", "model_name"]
+    search_fields = ["description", "model_name", "user__username"]
+    readonly_fields = list_display
+    ordering = ["-created_at"]
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

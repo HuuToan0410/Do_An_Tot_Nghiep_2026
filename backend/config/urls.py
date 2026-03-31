@@ -1,29 +1,18 @@
 from django.contrib import admin
 from django.urls import include, path
-from django.conf.urls.static import static
 from django.conf import settings
+from django.conf.urls.static import static
 
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
+from sales.views import RevenueStatsView, RevenueView
 
 urlpatterns = [
-    # Admin panel
     path("admin/", admin.site.urls),
-    # Authentication
-    path("api/auth/login/", TokenObtainPairView.as_view(), name="login"),
-    path("api/auth/refresh/", TokenRefreshView.as_view(), name="refresh"),
-    # Users
-    path("api/users/", include("users.urls")),
-    # Vehicles
-    path("api/vehicles/", include("vehicles.urls")),
-    # Inspections
-    path("api/inspections/", include("inspections.urls")),
-    # Refurbishment
-    path("api/refurbishment/", include("refurbishment.urls")),
-    # Sales
-    path("api/sales/", include("sales.urls")),
-]
-
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+    path("api/", include("users.urls")),  # auth, profile
+    path("api/", include("vehicles.urls")),  # vehicles, media, transition
+    path("api/", include("inspections.urls")),  # inspections
+    path("api/", include("refurbishment.urls")),
+    path("api/", include("sales.urls")),  # deposits, dashboard stats
+    # urls.py
+    #path("api/admin/revenue/", RevenueStatsView.as_view()),
+    path("api/dashboard/revenue/", RevenueView.as_view()),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

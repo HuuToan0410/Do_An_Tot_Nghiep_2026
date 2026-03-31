@@ -1,0 +1,33 @@
+# Thêm vào sales/urls.py — 3 URL mới cho MoMo
+
+# from sales.views_momo import (
+#     DepositCreateWithMoMoView,
+#     MoMoIPNView,
+#     DepositMoMoStatusView,
+# )
+
+# urlpatterns += [
+#     path("deposits/",                  DepositCreateWithMoMoView.as_view(), name="deposit-create-momo"),
+#     path("deposits/<int:pk>/momo/",    DepositMoMoStatusView.as_view(),     name="deposit-momo-status"),
+#     path("momo/ipn/",                  MoMoIPNView.as_view(),               name="momo-ipn"),
+# ]
+
+# ── AppRoutes.tsx — thêm 2 route frontend ─────────────────────
+# import DepositResultPage from "../pages/DepositResultPage";
+#
+# <Route path="/deposit/:vehicleId" element={<DepositPage />} />
+# <Route path="/deposit/result"     element={<DepositResultPage />} />   ← thêm mới
+
+# ── settings.py — thêm MoMo config ────────────────────────────
+MOMO_CONFIG_EXAMPLE = """
+# Test credentials (lấy từ https://developers.momo.vn)
+MOMO_PARTNER_CODE = "MOMOTEST"
+MOMO_ACCESS_KEY   = "F8BBA842ECF85"
+MOMO_SECRET_KEY   = "K951B6PE1waDMi640xX08PD3vg6EkVlz"
+MOMO_ENDPOINT     = "https://test-payment.momo.vn/v2/gateway/api/create"
+MOMO_REDIRECT_URL = "http://localhost:5173/deposit/result"
+MOMO_IPN_URL      = "https://xxxx.ngrok.io/api/momo/ipn/"  # dùng ngrok khi dev local
+"""
+
+# ── Cài thư viện ───────────────────────────────────────────────
+INSTALL = "pip install requests"  # đã có sẵn trong DRF, không cần thêm

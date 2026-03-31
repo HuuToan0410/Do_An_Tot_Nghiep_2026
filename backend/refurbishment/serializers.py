@@ -1,137 +1,232 @@
-from django.db.models import Sum
 from rest_framework import serializers
-
-from .models import RefurbishmentOrder, RefurbishmentItem
+from refurbishment.models import RefurbishmentItem, RefurbishmentOrder
 
 
 class RefurbishmentItemSerializer(serializers.ModelSerializer):
-    """
-    Serializer cho từng hạng mục sửa chữa.
-
-    Chỉ expose các trường cần thiết để tránh
-    payload API quá lớn.
-    """
+    item_type_display = serializers.CharField(
+        source="get_item_type_display", read_only=True
+    )
+    cost = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
         model = RefurbishmentItem
-
-        fields = (
+        fields = [
             "id",
             "name",
+            "item_type",
+            "item_type_display",
+            "quantity",
+            "unit_cost",
             "cost",
             "description",
+            "is_completed",
             "created_at",
-        )
-
-        read_only_fields = (
-            "id",
-            "created_at",
-        )
-
-    def validate_cost(self, value):
-        """
-        Kiểm tra chi phí hợp lệ
-        """
-        if value < 0:
-            raise serializers.ValidationError("Chi phí phải lớn hơn hoặc bằng 0")
-        return value
+        ]
+        read_only_fields = ["id", "cost", "created_at"]
 
 
+# refurbishment/serializers.py
 class RefurbishmentOrderSerializer(serializers.ModelSerializer):
-    """
-    Serializer cho lệnh sửa chữa / tân trang xe.
+    vehicle_name = serializers.SerializerMethodField()
+    technician_name = serializers.SerializerMethodField()
 
-    Bao gồm:
-    - thông tin xe
-    - kỹ thuật viên
-    - danh sách hạng mục sửa chữa
-    - tổng chi phí
-    """
+    class Meta:
+        model = RefurbishmentOrder
+        fields = "__all__"
 
-    items = RefurbishmentItemSerializer(many=True)
+    def get_vehicle_name(self, obj):
+        return f"{obj.vehicle.brand} {obj.vehicle.model} {obj.vehicle.year}"
 
+    def get_technician_name(self, obj):
+        return obj.technician.get_full_name() if obj.technician else ""
+
+
+""" class RefurbishmentOrderSerializer(serializers.ModelSerializer):
+    vehicle_name = serializers.SerializerMethodField()
+    technician_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RefurbishmentOrder
+        fields = "__all__"
+
+    def get_vehicle_name(self, obj):
+        return str(obj.vehicle)
+
+    def get_technician_name(self, obj):
+        if obj.technician:
+            return obj.technician.get_full_name()
+        return "" """
+
+
+class RefurbishmentListSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
     technician_name = serializers.CharField(
-        source="technician.username",
-        read_only=True,
+        source="technician.get_full_name", read_only=True
     )
+    vehicle_name = serializers.CharField(source="vehicle.display_name", read_only=True)
+    """ total_cost = serializers.DecimalField(
+        max_digits=14, decimal_places=2, read_only=True, source="total_cost"
+    ) """
+    total_cost = serializers.SerializerMethodField()
 
-    vehicle_vin = serializers.CharField(
-        source="vehicle.vin",
-        read_only=True,
-    )
+    def get_total_cost(self, obj):
+        return obj.total_cost
 
+    class Meta:
+        model = RefurbishmentOrder
+        fields = [
+            "id",
+            "vehicle",
+            "vehicle_name",
+            "technician",
+            "technician_name",
+            "status",
+            "status_display",
+            "total_cost",
+            "start_date",
+            "completed_date",
+            "created_at",
+        ]
+
+
+""" class RefurbishmentListSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    technician_name = serializers.SerializerMethodField()
+    vehicle_name = serializers.SerializerMethodField()
     total_cost = serializers.SerializerMethodField()
 
     class Meta:
         model = RefurbishmentOrder
-
-        fields = (
+        fields = [
             "id",
             "vehicle",
-            "vehicle_vin",
+            "vehicle_name",
             "technician",
             "technician_name",
             "status",
-            "note",
+            "status_display",
+            "total_cost",
             "start_date",
             "completed_date",
-            "items",
-            "total_cost",
             "created_at",
-            "updated_at",
-        )
+        ]
 
-        read_only_fields = (
-            "id",
-            "start_date",
-            "created_at",
-            "updated_at",
-        )
+    def get_technician_name(self, obj):
+        if obj.technician:
+            return obj.technician.get_full_name()
+        return ""
+
+    def get_vehicle_name(self, obj):
+        return str(obj.vehicle)
 
     def get_total_cost(self, obj):
-        """
-        Tính tổng chi phí sửa chữa.
+        try:
+            return obj.total_cost()
+        except Exception:
+            return 0   """
 
-        Sử dụng aggregate để tránh load toàn bộ items vào memory.
-        """
 
-        result = obj.items.aggregate(total=Sum("cost"))
+class RefurbishmentDetailSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    technician_name = serializers.CharField(
+        source="technician.get_full_name", read_only=True
+    )
+    approved_by_name = serializers.CharField(
+        source="approved_by.get_full_name", read_only=True
+    )
+    vehicle_name = serializers.CharField(source="vehicle.display_name", read_only=True)
+    items = RefurbishmentItemSerializer(many=True, read_only=True)
+    total_cost = serializers.SerializerMethodField()
 
-        return result["total"] or 0
+    class Meta:
+        model = RefurbishmentOrder
+        fields = [
+            "id",
+            "vehicle",
+            "vehicle_name",
+            "technician",
+            "technician_name",
+            "approved_by",
+            "approved_by_name",
+            "status",
+            "status_display",
+            "note",
+            "items",
+            "total_cost",
+            "start_date",
+            "completed_date",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
 
-    def create(self, validated_data):
-        """
-        Tạo lệnh sửa chữa kèm danh sách hạng mục.
-        """
+    def get_total_cost(self, obj):
+        return obj.total_cost
 
-        items_data = validated_data.pop("items", [])
 
-        order = RefurbishmentOrder.objects.create(**validated_data)
+""" class RefurbishmentDetailSerializer(serializers.ModelSerializer):
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    technician_name = serializers.SerializerMethodField()
+    approved_by_name = serializers.SerializerMethodField()
+    vehicle_name = serializers.SerializerMethodField()
+    items = RefurbishmentItemSerializer(many=True, read_only=True)
+    total_cost = serializers.SerializerMethodField()
 
-        items = [RefurbishmentItem(order=order, **item) for item in items_data]
+    class Meta:
+        model = RefurbishmentOrder
+        fields = [
+            "id",
+            "vehicle",
+            "vehicle_name",
+            "technician",
+            "technician_name",
+            "approved_by",
+            "approved_by_name",
+            "status",
+            "status_display",
+            "note",
+            "items",
+            "total_cost",
+            "start_date",
+            "completed_date",
+            "created_at",
+            "updated_at",
+        ]
 
-        RefurbishmentItem.objects.bulk_create(items)
+    def get_vehicle_name(self, obj):
+        return str(obj.vehicle)
 
-        return order
+    def get_technician_name(self, obj):
+        if obj.technician:
+            return obj.technician.get_full_name()
+        return ""
 
-    def update(self, instance, validated_data):
-        """
-        Cập nhật lệnh sửa chữa và các hạng mục.
-        """
+    def get_approved_by_name(self, obj):
+        if obj.approved_by:
+            return obj.approved_by.get_full_name()
+        return ""
 
-        items_data = validated_data.pop("items", None)
+    def get_total_cost(self, obj):
+        try:
+            return obj.total_cost()
+        except Exception:
+            return 0 """
 
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
 
-        instance.save()
+class RefurbishmentCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RefurbishmentOrder
+        fields = ["vehicle", "technician", "note", "start_date"]
 
-        if items_data is not None:
+    def validate_vehicle(self, value):
+        from vehicles.models import VehicleUnit
 
-            instance.items.all().delete()
-
-            items = [RefurbishmentItem(order=instance, **item) for item in items_data]
-
-            RefurbishmentItem.objects.bulk_create(items)
-
-        return instance
+        allowed = [
+            VehicleUnit.Status.WAIT_REFURBISH,
+            VehicleUnit.Status.REFURBISHING,
+        ]
+        if value.status not in allowed:
+            raise serializers.ValidationError(
+                "Xe phải ở trạng thái 'Chờ tân trang' hoặc 'Đang tân trang'."
+            )
+        return value

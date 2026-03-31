@@ -1,0 +1,91 @@
+@startuml
+left to right direction
+
+' Tùy chỉnh tăng khoảng cách giữa các node và cấu trúc để sơ đồ giãn rộng
+skinparam nodesep 80
+skinparam ranksep 120
+skinparam padding 8
+
+' Tùy chỉnh màu sắc cho đẹp mắt và dễ phân biệt
+skinparam usecase {
+    BackgroundColor #F0F8FF
+    BorderColor #0056b3
+    ArrowColor #666666
+}
+
+skinparam actor {
+    BackgroundColor #FFE4E1
+    BorderColor #CD5C5C
+}
+
+skinparam package {
+    BackgroundColor #FFFFFF
+    BorderColor #CCCCCC
+}
+
+actor "Khách hàng" as Customer
+
+package "Đội ngũ nhân sự nội bộ" {
+    actor "NV Thu mua" as Pur
+    actor "NV Kiểm định" as Insp
+    actor "Kỹ thuật viên" as Tech
+    actor "NV Định giá" as Price
+    actor "NV Bán hàng" as Sales
+    actor "Quản trị viên" as Admin
+}
+
+rectangle "Hệ thống AUTO Leng Art" {
+    
+    package "Phân hệ Khách hàng trực tuyến" {
+        usecase "Đăng ký và quản lý tài khoản" as UC_Account
+        usecase "Tìm kiếm và tra cứu xe" as UC_Search
+        usecase "Xem chi tiết và hồ sơ kiểm định" as UC_View
+        usecase "Đặt lịch hẹn xem xe" as UC_Appoint
+        usecase "Đặt cọc giữ xe trực tuyến" as UC_Deposit
+    }
+    
+    package "Phân hệ Quản lý Vòng đời Xe" {
+        usecase "Quản lý xe nhập kho" as UC_Import
+        usecase "Lập phiếu kiểm định điện tử" as UC_Inspect
+        usecase "Quản lý lệnh tân trang xe" as UC_Refurbish
+        usecase "Tính toán và phê duyệt giá" as UC_Price
+        usecase "Niêm yết xe lên trang chủ" as UC_List
+    }
+    
+    package "Phân hệ Bán hàng & Quản trị hệ thống" {
+        usecase "Quản lý đơn bán hàng" as UC_Order
+        usecase "Lập biên bản bàn giao xe" as UC_Handover
+        usecase "Quản lý sổ bảo hành" as UC_Warranty
+        usecase "Xem báo cáo thống kê" as UC_Report
+        usecase "Quản lý người dùng và quyền" as UC_Auth
+    }
+}
+
+' Kết nối Tác nhân Khách hàng
+Customer --> UC_Account
+Customer --> UC_Search
+Customer --> UC_View
+Customer --> UC_Appoint
+Customer --> UC_Deposit
+
+' Kết nối Tác nhân Nhân sự luồng vòng đời xe
+Pur --> UC_Import
+Insp --> UC_Inspect
+Tech --> UC_Refurbish
+Price --> UC_Price
+
+' Kết nối Tác nhân Nhân sự luồng bán hàng
+Sales --> UC_Appoint
+Sales --> UC_Order
+Sales --> UC_Handover
+Sales --> UC_Warranty
+
+' Kết nối Tác nhân Quản trị viên (Admin có quyền cao nhất)
+Admin --> UC_List
+Admin --> UC_Report
+Admin --> UC_Auth
+Admin --> UC_Price
+Admin --> UC_Order
+Admin --> UC_Import
+
+@enduml
