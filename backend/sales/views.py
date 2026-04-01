@@ -7,7 +7,12 @@ from rest_framework.exceptions import AuthenticationFailed
 from sales.momo import create_momo_payment, verify_ipn
 from vehicles.models import VehicleStatusLog, VehicleUnit
 from django.db.models import Sum, Count, Q
-from django.db.models.functions import TruncWeek, TruncMonth, ExtractQuarter, ExtractYear
+from django.db.models.functions import (
+    TruncWeek,
+    TruncMonth,
+    ExtractQuarter,
+    ExtractYear,
+)
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -245,13 +250,20 @@ class AppointmentListView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == "POST":
-            return [permissions.IsAuthenticated()]   # cho khách tạo
-        return [CanManageAppointment()] 
-    
+            return [permissions.AllowAny()]
+        return [CanManageAppointment()]
+
+    def get_authenticators(self):
+        # OptionalJWT: token hết hạn → anonymous, không raise 401
+        return [OptionalJWTAuthentication(), SessionAuthentication()]
+
     def get_queryset(self):
         qs = Appointment.objects.select_related("vehicle", "customer", "handled_by")
-        if self.request.user.role == "CUSTOMER":
-            qs = qs.filter(customer=self.request.user)
+        user = self.request.user
+        if user and user.is_authenticated and hasattr(user, "role"):
+            if user.role == "CUSTOMER":
+                qs = qs.filter(customer=user)
+
         vehicle_id = self.request.query_params.get("vehicle")
         status_val = self.request.query_params.get("status")
         if vehicle_id:
@@ -260,8 +272,41 @@ class AppointmentListView(generics.ListCreateAPIView):
             qs = qs.filter(status=status_val)
         return qs
 
+    def create(self, request, *args, **kwargs):
+        vehicle_id = request.data.get("vehicle")
+        customer_phone = request.data.get("customer_phone", "").strip()
+
+        # ── Backend spam check: cùng SĐT + cùng xe, trong 24h ──
+        if vehicle_id and customer_phone:
+            from django.utils import timezone
+
+            cutoff = timezone.now() - timezone.timedelta(hours=24)
+            recent = Appointment.objects.filter(
+                vehicle_id=vehicle_id,
+                customer_phone=customer_phone,
+                created_at__gte=cutoff,
+            ).count()
+
+            if recent >= 2:
+                return Response(
+                    {
+                        "detail": (
+                            "Bạn đã đặt lịch xem xe này hơn 2 lần trong 24 giờ qua. "
+                            "Vui lòng gọi hotline 0987 654 321 để được hỗ trợ trực tiếp."
+                        )
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
-        serializer.save(customer=self.request.user)
+        customer = (
+            self.request.user
+            if self.request.user and self.request.user.is_authenticated
+            else None
+        )
+        serializer.save(customer=customer)
 
 
 class AppointmentDetailView(generics.RetrieveUpdateAPIView):
@@ -936,6 +981,7 @@ class RevenueStatsView(APIView):
 
         return Response(data)
 
+
 # Trong RevenueView — fix field name và date format
 """ class RevenueView(APIView):
     permission_classes = [CanViewDashboard]
@@ -994,56 +1040,65 @@ class RevenueStatsView(APIView):
                 }
                 for d in data if d["month"]
             ]) """
-        
+
+
 class RevenueView(APIView):
     """
     GET /api/dashboard/revenue/?period=month|week|quarter
-    
+
     Trả về array trực tiếp (không wrap trong object).
     Dùng sold_at (không phải created_at).
     Format date thành string ngắn gọn cho frontend.
     """
+
     permission_classes = [CanViewDashboard]
- 
+
     def get(self, request):
         period = request.query_params.get("period", "month")
         qs = SalesOrder.objects.all()
- 
+
         if period == "week":
             data = (
-                qs.annotate(week=TruncWeek("sold_at"))   # ✅ sold_at
+                qs.annotate(week=TruncWeek("sold_at"))  # ✅ sold_at
                 .values("week")
                 .annotate(total=Sum("sale_price"), count=Count("id"))
                 .order_by("week")
             )
-            return Response([
-                {
-                    "week":  row["week"].strftime("%Y-%m-%d") if row["week"] else None,
-                    "total": str(row["total"] or 0),
-                    "count": row["count"],
-                }
-                for row in data if row["week"]
-            ])
- 
+            return Response(
+                [
+                    {
+                        "week": (
+                            row["week"].strftime("%Y-%m-%d") if row["week"] else None
+                        ),
+                        "total": str(row["total"] or 0),
+                        "count": row["count"],
+                    }
+                    for row in data
+                    if row["week"]
+                ]
+            )
+
         elif period == "quarter":
             data = (
                 qs.annotate(
-                    year=ExtractYear("sold_at"),       
+                    year=ExtractYear("sold_at"),
                     quarter=ExtractQuarter("sold_at"),
                 )
                 .values("year", "quarter")
                 .annotate(total=Sum("sale_price"), count=Count("id"))
                 .order_by("year", "quarter")
             )
-            return Response([
-                {
-                    "quarter": f"Q{row['quarter']}/{row['year']}",  
-                    "total":   str(row["total"] or 0),
-                    "count":   row["count"],
-                }
-                for row in data
-            ])
- 
+            return Response(
+                [
+                    {
+                        "quarter": f"Q{row['quarter']}/{row['year']}",
+                        "total": str(row["total"] or 0),
+                        "count": row["count"],
+                    }
+                    for row in data
+                ]
+            )
+
         else:  # month (default)
             data = (
                 qs.annotate(month=TruncMonth("sold_at"))  # ✅ sold_at
@@ -1051,24 +1106,29 @@ class RevenueView(APIView):
                 .annotate(total=Sum("sale_price"), count=Count("id"))
                 .order_by("month")
             )
-            return Response([
-                {
-                    "month": row["month"].strftime("%Y-%m") if row["month"] else None,
-                    # ✅ "2026-03" — không phải ISO full datetime
-                    "total": str(row["total"] or 0),
-                    "count": row["count"],
-                }
-                for row in data if row["month"]
-            ])
- 
+            return Response(
+                [
+                    {
+                        "month": (
+                            row["month"].strftime("%Y-%m") if row["month"] else None
+                        ),
+                        # ✅ "2026-03" — không phải ISO full datetime
+                        "total": str(row["total"] or 0),
+                        "count": row["count"],
+                    }
+                    for row in data
+                    if row["month"]
+                ]
+            )
+
+
 class HandoverListView(generics.ListAPIView):
     serializer_class = HandoverSerializer
     permission_classes = [CanManageHandover]
 
     def get_queryset(self):
         qs = HandoverRecord.objects.select_related(
-            "sales_order__vehicle",
-            "staff"
+            "sales_order__vehicle", "staff"
         ).order_by("-created_at")
 
         search = self.request.query_params.get("search")

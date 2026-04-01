@@ -17,6 +17,7 @@ import {
   Calendar,
   Shield,
   MapPin,
+  MessageSquare,
 } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import type { UserRole } from "../api/auth";
@@ -119,6 +120,12 @@ const NAV_ITEMS: NavItem[] = [
     icon: <MapPin size={18} />,
     allowedRoles: ["ADMIN", "SALES"],
   }, */
+  {
+    to: "/admin/inquiries",
+    label: "Yêu cầu",
+    icon: <MessageSquare size={18} />,
+    allowedRoles: ["ADMIN", "SALES"],
+  },
 ];
 
 // ── Props ──────────────────────────────────────────────────────

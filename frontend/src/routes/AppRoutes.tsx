@@ -34,6 +34,8 @@ import AdminAppointmentsPage from "../pages/admin/Adminappointmentspage";
 import AdminSalesOrdersPage from "../pages/admin/AdminSalesOrdersPage";
 import AdminWarrantiesPage from "../pages/admin/AdminWarrantiesPage";
 import AdminHandoversPage from "../pages/admin/Adminhandoverspage";
+import AdminInquiriesPage from "../pages/admin/AdminInquiriesPage";
+
 export default function AppRoutes() {
   return (
     <Routes>
@@ -193,6 +195,14 @@ export default function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={["ADMIN", "SALES"]}>
             <AdminHandoversPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/inquiries"
+        element={
+          <ProtectedRoute allowedRoles={["ADMIN", "SALES"]}>
+            <AdminInquiriesPage />
           </ProtectedRoute>
         }
       />

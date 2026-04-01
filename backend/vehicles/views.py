@@ -66,9 +66,12 @@ class VehicleListView(generics.ListAPIView):
 
     def get_queryset(self):
         qs = (
-            VehicleUnit.objects.filter(status=VehicleUnit.Status.LISTED)
+            VehicleUnit.objects.filter(status__in=["LISTED", "RESERVED"])
             .select_related("spec")
-            .prefetch_related("media")
+            .prefetch_related(
+                "media",
+                "appointments",
+            )
         )
         min_price = self.request.query_params.get("min_price")
         max_price = self.request.query_params.get("max_price")
@@ -99,7 +102,9 @@ class VehicleAdminListView(generics.ListAPIView):
 
     def get_queryset(self):
         return VehicleUnit.objects.select_related("spec").prefetch_related(
-            "media", "status_logs"
+            "media",
+            "status_logs",
+            "appointments",
         )
 
 

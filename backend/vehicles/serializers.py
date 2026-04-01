@@ -96,6 +96,7 @@ class VehicleListSerializer(serializers.ModelSerializer):
         source="get_transmission_display", read_only=True
     )
     thumbnail = serializers.SerializerMethodField()
+    has_appointment = serializers.SerializerMethodField()
 
     class Meta:
         model = VehicleUnit
@@ -117,19 +118,26 @@ class VehicleListSerializer(serializers.ModelSerializer):
             "status_display",
             "thumbnail",
             "created_at",
+            "has_appointment",
         ]
 
     def get_thumbnail(self, obj):
-        media = (
-            obj.media.filter(is_primary=True, media_type="IMAGE").first()
-            or obj.media.filter(media_type="IMAGE").first()
-        )
-        if not media:
-            return None
-        request = self.context.get("request")
-        return request.build_absolute_uri(media.file.url) if request else media.file.url
-
-
+        primary = obj.media.filter(is_primary=True, media_type="IMAGE").first()
+        if not primary:
+            primary = obj.media.filter(media_type="IMAGE").first()
+        if primary:
+            request = self.context.get("request")
+            return request.build_absolute_uri(primary.file.url) if request else primary.file.url
+        return None
+    def get_has_appointment(self, obj):
+        """True nếu xe có lịch hẹn PENDING hoặc CONFIRMED đang chờ."""
+        try:
+            return any(
+                a.status in ("PENDING", "CONFIRMED")
+                for a in obj.appointments.all()
+            )
+        except Exception:
+            return False
 # ── Detail (đầy đủ) ────────────────────────────────────────────
 
 

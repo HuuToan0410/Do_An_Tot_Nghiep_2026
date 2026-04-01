@@ -48,6 +48,60 @@ class AppointmentSerializer(serializers.ModelSerializer):
             return obj.handled_by.get_full_name() or obj.handled_by.username
         return None
 
+    def validate(self, attrs):
+        vehicle = attrs.get("vehicle")
+        scheduled_at = attrs.get("scheduled_at")
+        phone = attrs.get("customer_phone", "").strip()
+
+        if vehicle and scheduled_at:
+            from datetime import timedelta
+
+            # ── 1. Không đặt cùng khung giờ (±30 phút) với người khác ──
+            window_start = scheduled_at - timedelta(minutes=30)
+            window_end = scheduled_at + timedelta(minutes=30)
+
+            conflict = Appointment.objects.filter(
+                vehicle=vehicle,
+                scheduled_at__gte=window_start,
+                scheduled_at__lte=window_end,
+                status__in=["PENDING", "CONFIRMED"],
+            )
+            # Loại trừ bản ghi đang update (nếu là PATCH)
+            if self.instance:
+                conflict = conflict.exclude(pk=self.instance.pk)
+
+            if conflict.exists():
+                raise serializers.ValidationError(
+                    {
+                        "scheduled_at": (
+                            "Khung giờ này đã có lịch hẹn xem xe. "
+                            "Vui lòng chọn thời gian khác (trước hoặc sau ít nhất 30 phút)."
+                        )
+                    }
+                )
+
+            # ── 2. Cùng SĐT đặt 2+ lần cùng xe trong 24h ─────────────
+            if phone:
+                from django.utils import timezone
+
+                cutoff = timezone.now() - timedelta(hours=24)
+                recent_count = Appointment.objects.filter(
+                    vehicle=vehicle,
+                    customer_phone=phone,
+                    created_at__gte=cutoff,
+                ).count()
+                if self.instance is None and recent_count >= 2:
+                    raise serializers.ValidationError(
+                        {
+                            "customer_phone": (
+                                "Số điện thoại này đã đặt lịch xem xe quá nhiều lần trong 24 giờ. "
+                                "Vui lòng gọi hotline 0987 654 321 để được hỗ trợ."
+                            )
+                        }
+                    )
+
+        return attrs
+
 
 class DepositSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source="get_status_display", read_only=True)

@@ -20,10 +20,13 @@ from users.serializers import (
     UserUpdateSerializer,
     ResetPasswordSerializer,
 )
+from users.permissions import IsStaffMember
 from sales.permissions import CanViewDashboard
+from sales.models import SellInquiry, ContactInquiry
+
+""" from sales.serializers import SellInquirySerializer, ContactInquirySerializer """
 
 User = get_user_model()
-
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -267,6 +270,215 @@ class ContactRequestView(APIView):
             {"message": "Cảm ơn bạn! Chúng tôi sẽ liên hệ sớm nhất có thể."},
             status=status.HTTP_201_CREATED,
         )
+
+
+class SellRequestView(generics.CreateAPIView):
+    """
+    POST /api/sell-request/
+    Khách hàng gửi yêu cầu bán xe — không cần đăng nhập.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        data = {
+            "name": request.data.get("name", "").strip(),
+            "phone": request.data.get("phone", "").strip(),
+            "email": request.data.get("email", "").strip(),
+            "brand": request.data.get("brand", "").strip(),
+            "model": request.data.get("model", "").strip(),
+            "year": request.data.get("year", "").strip(),
+            "mileage": request.data.get("mileage", "").strip(),
+            "expected_price": request.data.get("expected_price", "").strip(),
+            "note": request.data.get("note", "").strip(),
+        }
+        if not data["name"] or not data["phone"]:
+            return Response(
+                {"detail": "Vui lòng cung cấp họ tên và số điện thoại."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        inquiry = SellInquiry.objects.create(**data)
+        return Response(
+            {
+                "message": "Gửi yêu cầu thành công! Chúng tôi sẽ liên hệ trong 30 phút.",
+                "id": inquiry.id,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ContactRequestView(generics.CreateAPIView):
+    """
+    POST /api/contact-request/
+    Khách hàng để lại thông tin tìm xe — không cần đăng nhập.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        data = {
+            "name": request.data.get("name", "").strip(),
+            "phone": request.data.get("phone", "").strip(),
+            "email": request.data.get("email", "").strip(),
+            "message": request.data.get("message", "").strip(),
+        }
+        if not data["name"]:
+            return Response(
+                {"detail": "Vui lòng nhập họ tên."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not data["phone"] and not data["email"]:
+            return Response(
+                {"detail": "Vui lòng cung cấp ít nhất số điện thoại hoặc email."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        inquiry = ContactInquiry.objects.create(**data)
+        return Response(
+            {
+                "message": "Đã nhận được yêu cầu! Chúng tôi sẽ liên hệ sớm nhất.",
+                "id": inquiry.id,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+# ── Admin views — xem & cập nhật is_contacted ─────────────────
+
+
+class AdminSellRequestListView(generics.ListAPIView):
+    """
+    GET /api/admin/sell-requests/
+    Admin/sales xem toàn bộ yêu cầu bán xe.
+    """
+
+    permission_classes = [IsStaffMember]
+
+    def get(self, request):
+        qs = SellInquiry.objects.all().order_by("-created_at")
+        is_contacted = request.query_params.get("is_contacted")
+        if is_contacted == "true":
+            qs = qs.filter(is_contacted=True)
+        elif is_contacted == "false":
+            qs = qs.filter(is_contacted=False)
+
+        data = [
+            {
+                "id": i.id,
+                "name": i.name,
+                "phone": i.phone,
+                "email": i.email or "",
+                "brand": i.brand or "",
+                "model": i.model or "",
+                "year": i.year or "",
+                "mileage": i.mileage or "",
+                "expected_price": i.expected_price or "",
+                "note": i.note or "",
+                "is_contacted": i.is_contacted,
+                "created_at": i.created_at.isoformat(),
+            }
+            for i in qs
+        ]
+        return Response(data)
+
+
+class AdminSellRequestDetailView(generics.RetrieveUpdateAPIView):
+    """
+    GET/PATCH /api/admin/sell-requests/<id>/
+    Đánh dấu đã liên hệ: PATCH { is_contacted: true }
+    """
+
+    permission_classes = [IsStaffMember]
+
+    def get_object(self):
+        from django.shortcuts import get_object_or_404
+
+        return get_object_or_404(SellInquiry, pk=self.kwargs["pk"])
+
+    def get(self, request, pk):
+        i = self.get_object()
+        return Response(
+            {
+                "id": i.id,
+                "name": i.name,
+                "phone": i.phone,
+                "email": i.email,
+                "brand": i.brand,
+                "model": i.model,
+                "year": i.year,
+                "mileage": i.mileage,
+                "expected_price": i.expected_price,
+                "note": i.note,
+                "is_contacted": i.is_contacted,
+                "created_at": i.created_at.isoformat(),
+            }
+        )
+
+    def patch(self, request, pk):
+        i = self.get_object()
+        if "is_contacted" in request.data:
+            i.is_contacted = request.data["is_contacted"]
+            i.save(update_fields=["is_contacted"])
+        return Response({"message": "Đã cập nhật.", "is_contacted": i.is_contacted})
+
+
+class AdminContactRequestListView(generics.ListAPIView):
+    """GET /api/admin/contact-requests/"""
+
+    permission_classes = [IsStaffMember]
+
+    def get(self, request):
+        qs = ContactInquiry.objects.all().order_by("-created_at")
+        is_contacted = request.query_params.get("is_contacted")
+        if is_contacted == "true":
+            qs = qs.filter(is_contacted=True)
+        elif is_contacted == "false":
+            qs = qs.filter(is_contacted=False)
+
+        data = [
+            {
+                "id": i.id,
+                "name": i.name,
+                "phone": i.phone or "",
+                "email": i.email or "",
+                "message": i.message or "",
+                "is_contacted": i.is_contacted,
+                "created_at": i.created_at.isoformat(),
+            }
+            for i in qs
+        ]
+        return Response(data)
+
+
+class AdminContactRequestDetailView(generics.RetrieveUpdateAPIView):
+    """PATCH /api/admin/contact-requests/<id>/"""
+
+    permission_classes = [IsStaffMember]
+
+    def get_object(self):
+        from django.shortcuts import get_object_or_404
+
+        return get_object_or_404(ContactInquiry, pk=self.kwargs["pk"])
+
+    def get(self, request, pk):
+        i = self.get_object()
+        return Response(
+            {
+                "id": i.id,
+                "name": i.name,
+                "phone": i.phone,
+                "email": i.email,
+                "message": i.message,
+                "is_contacted": i.is_contacted,
+                "created_at": i.created_at.isoformat(),
+            }
+        )
+
+    def patch(self, request, pk):
+        i = self.get_object()
+        if "is_contacted" in request.data:
+            i.is_contacted = request.data["is_contacted"]
+            i.save(update_fields=["is_contacted"])
+        return Response({"message": "Đã cập nhật.", "is_contacted": i.is_contacted})
 
 
 @api_view(["GET"])

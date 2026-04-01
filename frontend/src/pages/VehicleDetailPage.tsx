@@ -15,6 +15,9 @@ import {
   Star,
   ArrowRight,
   Heart,
+  Lock,
+  AlertTriangle,
+  Ban,
 } from "lucide-react";
 import { getVehiclePublicInspection } from "../api/inspection";
 import InspectionReport from "../components/InspectionReport";
@@ -25,6 +28,7 @@ import VehicleGallery from "../components/VehicleGallery";
 import VehicleCard from "../components/VehicleCard";
 import FavoriteButton from "../components/FavoriteButton";
 import AppointmentForm from "../components/Appointmentform";
+
 // ── Helpers ────────────────────────────────────────────────────
 
 function getFuelLabel(v?: string) {
@@ -42,6 +46,68 @@ function formatVNPrice(price?: string | number | null): string {
   if (ty > 0) return `${ty} Tỷ`;
   return `${trieu} Triệu VNĐ`;
 }
+
+// ── Trạng thái xe có thể đặt cọc / xem không ─────────────────
+type VehicleStatus = string;
+
+function canDeposit(status: VehicleStatus): boolean {
+  return status === "LISTED";
+}
+
+function canViewAppointment(status: VehicleStatus): boolean {
+  return ["LISTED", "RESERVED"].includes(status);
+}
+
+function isReserved(status: VehicleStatus): boolean {
+  return status === "RESERVED";
+}
+
+function isSold(status: VehicleStatus): boolean {
+  return status === "SOLD" || status === "WARRANTY";
+}
+
+// ── Status Banner ─────────────────────────────────────────────
+
+function VehicleStatusBanner({ status }: { status: VehicleStatus }) {
+  if (isSold(status)) {
+    return (
+      <div className="flex items-center gap-3 bg-gray-800 text-white rounded-2xl p-4 mb-4">
+        <div className="w-10 h-10 bg-gray-700 rounded-xl flex items-center justify-center shrink-0">
+          <Ban size={20} className="text-gray-300" />
+        </div>
+        <div>
+          <p className="font-bold text-sm">Xe đã được bán</p>
+          <p className="text-gray-400 text-xs mt-0.5">
+            Xe này đã có chủ mới. Xem các xe khác đang bán bên dưới.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isReserved(status)) {
+    return (
+      <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+        <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+          <Lock size={20} className="text-amber-600" />
+        </div>
+        <div>
+          <p className="font-bold text-amber-800 text-sm">
+            Xe đang được giữ chỗ
+          </p>
+          <p className="text-amber-700 text-xs mt-0.5">
+            Có khách đã đặt cọc xe này. Bạn vẫn có thể đặt lịch xem xe hoặc liên
+            hệ để được thông báo nếu cọc bị hủy.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ── Spec Item ─────────────────────────────────────────────────
 
 function SpecItem({
   icon,
@@ -66,6 +132,8 @@ function SpecItem({
   );
 }
 
+// ── Main ──────────────────────────────────────────────────────
+
 export default function VehicleDetailPage() {
   const { id } = useParams();
 
@@ -73,7 +141,7 @@ export default function VehicleDetailPage() {
     queryKey: ["vehicleInspection", id],
     queryFn: () => getVehiclePublicInspection(id!),
     enabled: !!id,
-    retry: false, // không retry nếu 404
+    retry: false,
   });
 
   const { data, isLoading, isError } = useQuery({
@@ -92,7 +160,6 @@ export default function VehicleDetailPage() {
   const featuredCars = (featuredData?.results ?? [])
     .filter((v) => String(v.id) !== String(id))
     .slice(0, 4);
-  
 
   // ── Loading ──
   if (isLoading) {
@@ -102,7 +169,7 @@ export default function VehicleDetailPage() {
           <div className="grid lg:grid-cols-2 gap-10">
             <div className="aspect-[4/3] bg-gray-100 rounded-2xl animate-pulse" />
             <div className="space-y-4">
-              <div className="h-8  bg-gray-100 rounded-xl animate-pulse w-2/3" />
+              <div className="h-8 bg-gray-100 rounded-xl animate-pulse w-2/3" />
               <div className="h-16 bg-gray-100 rounded-xl animate-pulse" />
               <div className="grid grid-cols-2 gap-3">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
@@ -119,7 +186,7 @@ export default function VehicleDetailPage() {
     );
   }
 
-  // ── Error ──
+  // ── Error / Not found ──
   if (isError || !data) {
     return (
       <MainLayout>
@@ -151,6 +218,11 @@ export default function VehicleDetailPage() {
       .map((m) => m.file) ?? [];
 
   const spec = data.spec;
+  const vehicleStatus = data.status ?? "";
+  const allowDeposit = canDeposit(vehicleStatus);
+  const allowAppoint = canViewAppointment(vehicleStatus);
+  const reserved = isReserved(vehicleStatus);
+  const sold = isSold(vehicleStatus);
 
   return (
     <MainLayout>
@@ -174,12 +246,35 @@ export default function VehicleDetailPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="grid lg:grid-cols-2 gap-10">
           {/* ── Gallery ── */}
-          <div>
+          <div className="relative">
             <VehicleGallery images={images} />
+            {/* Overlay khi xe đã bán */}
+            {sold && (
+              <div className="absolute inset-0 bg-gray-900/60 rounded-2xl flex items-center justify-center">
+                <div className="bg-white/95 rounded-2xl px-6 py-4 text-center shadow-xl">
+                  <Ban size={32} className="text-gray-500 mx-auto mb-2" />
+                  <p className="font-black text-gray-800 text-lg">Đã bán</p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    Xe này không còn khả dụng
+                  </p>
+                </div>
+              </div>
+            )}
+            {/* Overlay khi xe đã đặt cọc */}
+            {reserved && (
+              <div className="absolute top-3 left-3">
+                <span className="flex items-center gap-1.5 bg-amber-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-md">
+                  <Lock size={11} /> Đang giữ chỗ
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ── Info ── */}
           <div className="space-y-5">
+            {/* Status Banner — hiện rõ ràng khi RESERVED / SOLD */}
+            <VehicleStatusBanner status={vehicleStatus} />
+
             {/* Badges */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1 bg-green-100 text-green-700 text-xs font-bold px-3 py-1.5 rounded-full">
@@ -190,8 +285,17 @@ export default function VehicleDetailPage() {
                   {data.year}
                 </span>
               )}
+              {/* Status badge với màu động */}
               {data.status_display && (
-                <span className="bg-blue-100 text-blue-700 text-xs font-semibold px-3 py-1.5 rounded-full">
+                <span
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full ${
+                    sold
+                      ? "bg-gray-200 text-gray-600"
+                      : reserved
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-blue-100 text-blue-700"
+                  }`}
+                >
                   {data.status_display}
                 </span>
               )}
@@ -215,17 +319,42 @@ export default function VehicleDetailPage() {
             </div>
 
             {/* Price block */}
-            <div className="bg-gradient-to-br from-red-50 to-red-100/50 rounded-2xl p-5 border border-red-100">
-              <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-1">
-                Giá bán
+            <div
+              className={`rounded-2xl p-5 border ${
+                sold
+                  ? "bg-gray-50 border-gray-200"
+                  : reserved
+                    ? "bg-amber-50 border-amber-100"
+                    : "bg-gradient-to-br from-red-50 to-red-100/50 border-red-100"
+              }`}
+            >
+              <p
+                className={`text-xs font-semibold uppercase tracking-wider mb-1 ${
+                  sold
+                    ? "text-gray-400"
+                    : reserved
+                      ? "text-amber-500"
+                      : "text-red-400"
+                }`}
+              >
+                {sold ? "Đã bán" : reserved ? "Đang giữ chỗ" : "Giá bán"}
               </p>
-              <p className="text-4xl font-black text-red-600 leading-none">
+              <p
+                className={`text-4xl font-black leading-none ${
+                  sold
+                    ? "text-gray-400 line-through"
+                    : reserved
+                      ? "text-amber-700"
+                      : "text-red-600"
+                }`}
+              >
                 {formatVNPrice(data.sale_price)}
               </p>
-              {data.purchase_price && Number(data.purchase_price) > 0 && (
-                <p className="text-xs text-gray-400 mt-2 flex items-center gap-1">
-                  Giá thu mua:{" "}
-                  {Number(data.purchase_price).toLocaleString("vi-VN")} đ
+              {reserved && (
+                <p className="text-amber-600 text-xs mt-2 flex items-center gap-1">
+                  <AlertTriangle size={11} />
+                  Xe đang được giữ chỗ. Liên hệ để được thông báo nếu cọc bị
+                  hủy.
                 </p>
               )}
             </div>
@@ -348,20 +477,37 @@ export default function VehicleDetailPage() {
                 </div>
               )}
 
-            {/* CTA */}
+            {/* ── CTA: thay đổi theo status ── */}
             <div className="space-y-3 pt-1">
-              <Link
-                to={`/deposit/${data.id}`}
-                className="flex items-center justify-center gap-2 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl transition-colors text-base"
-              >
-                <Heart size={18} /> Đặt cọc xe ngay
-              </Link>
-              <FavoriteButton
-                vehicleId={Number(id)}
-                size="lg"
-                showLabel
-                className="w-full justify-center border border-gray-200"
-              />
+              {/* NÚT ĐẶT CỌC */}
+              {allowDeposit ? (
+                <Link
+                  to={`/deposit/${data.id}`}
+                  className="flex items-center justify-center gap-2 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl transition-colors text-base"
+                >
+                  <Heart size={18} /> Đặt cọc xe ngay
+                </Link>
+              ) : reserved ? (
+                <div className="flex items-center justify-center gap-2 w-full bg-amber-100 text-amber-700 font-bold py-4 rounded-xl text-base border border-amber-200 cursor-not-allowed">
+                  <Lock size={18} /> Xe đang được giữ chỗ
+                </div>
+              ) : sold ? (
+                <div className="flex items-center justify-center gap-2 w-full bg-gray-100 text-gray-400 font-bold py-4 rounded-xl text-base cursor-not-allowed">
+                  <Ban size={18} /> Xe đã được bán
+                </div>
+              ) : null}
+
+              {/* Yêu thích — luôn hiện */}
+              {!sold && (
+                <FavoriteButton
+                  vehicleId={Number(id)}
+                  size="lg"
+                  showLabel
+                  className="w-full justify-center border border-gray-200"
+                />
+              )}
+
+              {/* Gọi + Zalo */}
               <div className="grid grid-cols-2 gap-3">
                 <a
                   href="tel:0987654321"
@@ -378,6 +524,8 @@ export default function VehicleDetailPage() {
                   <MessageCircle size={15} /> Nhắn Zalo
                 </a>
               </div>
+
+              {/* Link kiểm định */}
               {inspection && (
                 <Link
                   to={`/vehicles/${data.id}/inspection`}
@@ -418,11 +566,10 @@ export default function VehicleDetailPage() {
           </div>
         </div>
 
-        {/* ── Details tabs ── */}
+        {/* ── Details section ── */}
         <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left col — 2/3 */}
+          {/* Left — 2/3 */}
           <div className="lg:col-span-2 space-y-5">
-            {/* Tình trạng xe */}
             {spec &&
               (spec.engine_condition ||
                 spec.brake_condition ||
@@ -430,8 +577,8 @@ export default function VehicleDetailPage() {
                 spec.electrical_condition) && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                   <h2 className="text-lg font-black text-gray-900 mb-5 flex items-center gap-2">
-                    <span className="w-1 h-5 bg-red-600 rounded-full" />
-                    Tình trạng xe
+                    <span className="w-1 h-5 bg-red-600 rounded-full" /> Tình
+                    trạng xe
                   </h2>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
@@ -461,20 +608,19 @@ export default function VehicleDetailPage() {
                 </div>
               )}
 
-            {/* Mô tả */}
             {data.description && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <h2 className="text-lg font-black text-gray-900 mb-4 flex items-center gap-2">
-                  <span className="w-1 h-5 bg-red-600 rounded-full" />
-                  Mô tả xe
+                  <span className="w-1 h-5 bg-red-600 rounded-full" /> Mô tả xe
                 </h2>
                 <p className="text-gray-600 leading-relaxed whitespace-pre-line text-sm">
                   {data.description}
                 </p>
               </div>
             )}
+
             {inspection && (
-              <div className="mt-6">
+              <div className="mt-2">
                 <div className="flex items-center gap-2 mb-4">
                   <span className="w-1 h-5 bg-green-600 rounded-full" />
                   <h2 className="text-lg font-black text-gray-900">
@@ -485,15 +631,13 @@ export default function VehicleDetailPage() {
               </div>
             )}
 
-            {/* Lịch sử */}
             {data.status_logs && data.status_logs.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <h2 className="text-lg font-black text-gray-900 mb-5 flex items-center gap-2">
-                  <span className="w-1 h-5 bg-red-600 rounded-full" />
-                  Lịch sử vòng đời xe
+                  <span className="w-1 h-5 bg-red-600 rounded-full" /> Lịch sử
+                  vòng đời xe
                 </h2>
                 <div className="relative">
-                  {/* Timeline line */}
                   <div className="absolute left-2 top-2 bottom-2 w-0.5 bg-gray-200" />
                   <div className="space-y-4">
                     {data.status_logs.slice(0, 5).map((log, i) => (
@@ -528,9 +672,9 @@ export default function VehicleDetailPage() {
             )}
           </div>
 
-          {/* Right col — 1/3 */}
+          {/* Right — 1/3 */}
           <div className="space-y-4">
-            {/* Hotline card */}
+            {/* Hotline */}
             <div className="bg-gradient-to-br from-red-600 to-red-700 text-white rounded-2xl p-6 text-center shadow-lg">
               <p className="text-red-200 text-sm mb-1">Cần tư vấn ngay?</p>
               <a
@@ -545,7 +689,7 @@ export default function VehicleDetailPage() {
               <div className="grid grid-cols-2 gap-2 mt-4">
                 <a
                   href="tel:0987654321"
-                  className="flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold py-2 rounded-xl transition-colors"
+                  className="flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold py-2 rounded-xl"
                 >
                   <Phone size={14} /> Gọi
                 </a>
@@ -553,31 +697,63 @@ export default function VehicleDetailPage() {
                   href="https://zalo.me/0987654321"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold py-2 rounded-xl transition-colors"
+                  className="flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-sm font-semibold py-2 rounded-xl"
                 >
                   <MessageCircle size={14} /> Zalo
                 </a>
               </div>
             </div>
 
-            {/* Deposit CTA */}
-            <Link
-              to={`/deposit/${data.id}`}
-              className="block bg-white rounded-2xl border-2 border-red-600 p-5 text-center hover:bg-red-50 transition-colors group"
-            >
-              <p className="font-black text-red-600 text-lg group-hover:gap-3 transition-all">
-                Đặt cọc ngay
-              </p>
-              <p className="text-gray-500 text-xs mt-1">
-                Cọc 10 triệu · Hoàn 100% nếu hủy trong 24h
-              </p>
-            </Link>
-            <AppointmentForm
-              vehicleId={data.id}
-              vehicleName={`${data.brand} ${data.model} ${data.year}`}
-            />
+            {/* Deposit CTA hoặc thông báo */}
+            {allowDeposit ? (
+              <Link
+                to={`/deposit/${data.id}`}
+                className="block bg-white rounded-2xl border-2 border-red-600 p-5 text-center hover:bg-red-50 transition-colors group"
+              >
+                <p className="font-black text-red-600 text-lg">Đặt cọc ngay</p>
+                <p className="text-gray-500 text-xs mt-1">
+                  Cọc 10 triệu · Hoàn 100% nếu hủy trong 24h
+                </p>
+              </Link>
+            ) : reserved ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-center">
+                <Lock size={20} className="text-amber-500 mx-auto mb-2" />
+                <p className="font-bold text-amber-800 text-sm">
+                  Xe đang được giữ chỗ
+                </p>
+                <p className="text-amber-600 text-xs mt-1">
+                  Gọi ngay để được thông báo nếu cọc bị hủy
+                </p>
+              </div>
+            ) : sold ? (
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 text-center">
+                <Ban size={20} className="text-gray-400 mx-auto mb-2" />
+                <p className="font-bold text-gray-600 text-sm">
+                  Xe đã được bán
+                </p>
+                <Link
+                  to="/vehicles"
+                  className="text-red-600 text-xs font-semibold hover:underline mt-1 block"
+                >
+                  Xem xe khác →
+                </Link>
+              </div>
+            ) : null}
 
-            {/* Share/save */}
+            {/* Form đặt lịch — chỉ hiện khi xe còn xem được */}
+            {allowAppoint ? (
+              <AppointmentForm
+                vehicleId={data.id}
+                vehicleName={`${data.brand} ${data.model} ${data.year}`}
+              />
+            ) : sold ? (
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 text-center text-gray-400">
+                <Calendar size={24} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Không thể đặt lịch — xe đã được bán</p>
+              </div>
+            ) : null}
+
+            {/* Cam kết */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
               <p className="text-sm font-bold text-gray-700 mb-3">Cam kết</p>
               {[
@@ -609,7 +785,7 @@ export default function VehicleDetailPage() {
           </div>
         </div>
 
-        {/* ── Xe nổi bật ── */}
+        {/* Xe nổi bật */}
         {featuredCars.length > 0 && (
           <div className="mt-14">
             <div className="flex items-center justify-between mb-6">

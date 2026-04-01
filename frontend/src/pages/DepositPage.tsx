@@ -127,6 +127,19 @@ export default function DepositPage() {
     ?.filter((m) => m.media_type === "IMAGE")
     .sort((a, b) => (b.is_primary ? 1 : 0) - (a.is_primary ? 1 : 0))[0]?.file;
 
+  // Autofill khi đã đăng nhập
+  useEffect(() => {
+    if (!authed || !user) return;
+    const fullName = [user.first_name, user.last_name]
+      .filter(Boolean)
+      .join(" ");
+    setForm((p) => ({
+      ...p,
+      name: fullName || p.name,
+      phone: user.phone || p.phone,
+      email: user.email || p.email,
+    }));
+  }, [authed, user]);
   // ── Mutation: tạo deposit → nhận pay_url → redirect MoMo ──
   const mutation = useMutation({
     mutationFn: async (f: FormState): Promise<DepositResponse> => {
@@ -213,7 +226,62 @@ export default function DepositPage() {
         </div>
       </MainLayout>
     );
+  const vStatus = vehicle.status ?? "";
+  const isReserved = vStatus === "RESERVED";
+  const isSold = ["SOLD", "WARRANTY"].includes(vStatus);
+  const canDeposit = vStatus === "LISTED";
 
+  // ── Xe không thể đặt cọc ──
+  if (isReserved || isSold) {
+    return (
+      <MainLayout>
+        <div className="max-w-lg mx-auto px-4 py-16 text-center">
+          <div
+            className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 ${
+              isSold ? "bg-gray-100" : "bg-amber-100"
+            }`}
+          >
+            {isSold ? (
+              <Ban size={36} className="text-gray-400" />
+            ) : (
+              <Lock size={36} className="text-amber-500" />
+            )}
+          </div>
+          <h2 className="text-2xl font-black text-gray-900 mb-2">
+            {isSold ? "Xe đã được bán" : "Xe đang được giữ chỗ"}
+          </h2>
+          <p className="text-gray-500 text-sm mb-2">
+            {isSold
+              ? "Xe này đã có chủ mới và không còn khả dụng để đặt cọc."
+              : "Đã có khách đặt cọc xe này. Bạn không thể đặt cọc thêm lúc này."}
+          </p>
+          {isReserved && (
+            <p className="text-amber-600 text-sm mb-6">
+              Gọi{" "}
+              <a href="tel:0987654321" className="font-bold hover:underline">
+                0987 654 321
+              </a>{" "}
+              để được thông báo nếu cọc bị hủy.
+            </p>
+          )}
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Link
+              to={`/vehicles/${vehicleId}`}
+              className="flex items-center justify-center gap-2 border border-gray-200 hover:border-gray-300 text-gray-700 font-semibold px-5 py-2.5 rounded-xl text-sm"
+            >
+              ← Quay lại xe
+            </Link>
+            <Link
+              to="/vehicles"
+              className="flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-5 py-2.5 rounded-xl text-sm"
+            >
+              Xem xe khác <ArrowRight size={14} />
+            </Link>
+          </div>
+        </div>
+      </MainLayout>
+    );
+  }
   return (
     <MainLayout>
       {/* Breadcrumb */}
