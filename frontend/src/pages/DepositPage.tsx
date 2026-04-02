@@ -318,7 +318,7 @@ export default function DepositPage() {
       </div>
 
       <div className="max-w-5xl mx-auto px-4 py-10">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-8">
           {/* ── Form — 3/5 ── */}
           <div className="lg:col-span-3 space-y-5">
             {mutation.isError && (
@@ -341,7 +341,7 @@ export default function DepositPage() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <Field
                   icon={<User size={14} />}
                   label="Họ và tên"

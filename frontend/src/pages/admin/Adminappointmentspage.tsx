@@ -107,7 +107,7 @@ function DetailPanel({
   });
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-5">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5 space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -297,15 +297,15 @@ export default function AdminAppointmentsPage() {
       title="Lịch hẹn xem xe"
       breadcrumb={[{ label: "Lịch hẹn xem xe" }]}
     >
-      <div className="flex gap-6 h-full">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 h-full">
         {/* Left — List */}
         <div
           className={`flex flex-col min-w-0 transition-all duration-300 ${
-            selected ? "w-[420px] shrink-0" : "flex-1"
+            selected ? "hidden w-full lg:w-[420px] shrink-0" : "flex-1"
           }`}
         >
           {/* Stats */}
-          <div className="grid grid-cols-5 gap-2.5 mb-5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5 mb-4 sm:mb-5">
             {[
               {
                 label: "Tổng",
@@ -349,7 +349,7 @@ export default function AdminAppointmentsPage() {
           </div>
 
           {/* Search + Filter */}
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex flex-col sm:flex-row gap-2 mb-4">
             <div className="relative flex-1">
               <Search
                 size={13}
@@ -373,7 +373,7 @@ export default function AdminAppointmentsPage() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-red-400 bg-white shrink-0"
+              className="w-full sm:w-auto border border-gray-200 rounded-xl px-3 py-2 text-xs sm:text-sm focus:outline-none focus:border-red-400 bg-white shrink-0"
             >
               {statusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -394,7 +394,7 @@ export default function AdminAppointmentsPage() {
               <p className="text-sm">Không có lịch hẹn nào</p>
             </div>
           ) : (
-            <div className="space-y-3 overflow-y-auto">
+            <div className="space-y-3 overflow-y-auto max-h-[60vh] lg:max-h-full">
               {filtered.map((appt) => {
                 const isSelected = selectedId === appt.id;
                 return (
@@ -456,7 +456,7 @@ export default function AdminAppointmentsPage() {
 
         {/* Right — Detail */}
         {selected && (
-          <div className="flex-1 min-w-0">
+          <div className="w-full lg:flex-1 min-w-0">
             <DetailPanel
               appointment={selected}
               onClose={() => setSelectedId(null)}

@@ -122,7 +122,7 @@ export default function ContactPage() {
 
       {/* ── Map + Info ── */}
       <section className="max-w-7xl mx-auto px-4 py-14">
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-8">
           {/* Info panel — 2/5 */}
           <div className="lg:col-span-2 space-y-6">
             {/* Header */}
@@ -274,7 +274,7 @@ export default function ContactPage() {
 
           {/* Map — 3/5 */}
           <div className="lg:col-span-3">
-            <div className="rounded-2xl overflow-hidden shadow-xl border border-gray-100 h-full min-h-[480px]">
+            <div className="rounded-2xl overflow-hidden shadow-xl border border-gray-100 h-full min-h-[300px] sm:min-h-[400px] lg:min-h-[480px]">
               <iframe
                 title="AUTO Leng Art"
                 src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d7836.826351521081!2d106.70233418306235!3d10.856145756175945!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x317528147fc926e3%3A0xe2ab55d5e51d44c!2zQW4gUGjDuiDEkMO0bmcgMTIsIEFuIFBow7ogxJDDtG5nLCBRdeG6rW4gMTIsIEjhu5MgQ2jDrSBNaW5oLCBWaeG7h3QgTmFt!5e0!3m2!1svi!2s!4v1773914861570!5m2!1svi!2s"

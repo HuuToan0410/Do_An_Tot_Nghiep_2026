@@ -166,7 +166,7 @@ export default function VehicleDetailPage() {
     return (
       <MainLayout>
         <div className="max-w-7xl mx-auto px-4 py-10">
-          <div className="grid lg:grid-cols-2 gap-10">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
             <div className="aspect-[4/3] bg-gray-100 rounded-2xl animate-pulse" />
             <div className="space-y-4">
               <div className="h-8 bg-gray-100 rounded-xl animate-pulse w-2/3" />
@@ -244,7 +244,7 @@ export default function VehicleDetailPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="grid lg:grid-cols-2 gap-10">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10">
           {/* ── Gallery ── */}
           <div className="relative">
             <VehicleGallery images={images} />
@@ -360,7 +360,7 @@ export default function VehicleDetailPage() {
             </div>
 
             {/* Specs grid */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
               <SpecItem
                 icon={<Calendar size={14} />}
                 label="Năm sản xuất"
@@ -537,7 +537,7 @@ export default function VehicleDetailPage() {
             </div>
 
             {/* Trust bar */}
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
               {[
                 {
                   icon: <Shield size={14} className="text-green-600" />,
@@ -567,7 +567,7 @@ export default function VehicleDetailPage() {
         </div>
 
         {/* ── Details section ── */}
-        <div className="mt-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="mt-8 lg:mt-12 grid grid-cols-1 lg:grid-cols-3 gap-5 lg:gap-6">
           {/* Left — 2/3 */}
           <div className="lg:col-span-2 space-y-5">
             {spec &&
@@ -580,7 +580,7 @@ export default function VehicleDetailPage() {
                     <span className="w-1 h-5 bg-red-600 rounded-full" /> Tình
                     trạng xe
                   </h2>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                     {[
                       { label: "Động cơ", value: spec.engine_condition },
                       { label: "Hệ thống phanh", value: spec.brake_condition },

@@ -216,7 +216,7 @@ export default function SellPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 lg:gap-8">
 
             {/* ── Form bán xe — 3/5 ── */}
             <div className="lg:col-span-3">
@@ -296,7 +296,7 @@ export default function SellPage() {
                     <p className="text-sm font-bold text-gray-800 uppercase tracking-wider">Thông tin xe muốn bán</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <Field label="Hãng xe">
                       <div className="relative">
                         <Car size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

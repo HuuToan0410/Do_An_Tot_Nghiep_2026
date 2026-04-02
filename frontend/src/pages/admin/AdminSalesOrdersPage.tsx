@@ -307,7 +307,7 @@ export default function AdminSalesOrdersPage() {
       )}
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 lg:gap-4 mb-4 lg:mb-6">
         {[
           { label: "Tổng đơn", value: totalCount, icon: <ShoppingBag size={18} className="text-blue-600" />, bg: "bg-blue-50", color: "text-blue-700" },
           { label: "Doanh thu trang này", value: formatVND(totalRevenue), icon: <DollarSign size={18} className="text-green-600" />, bg: "bg-green-50", color: "text-green-700" },

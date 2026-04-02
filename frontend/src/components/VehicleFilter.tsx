@@ -1,6 +1,6 @@
 import { SlidersHorizontal, RotateCcw } from "lucide-react";
 import type { VehicleFilters } from "../api/vehicles";
-import { FUEL_TYPES, TRANSMISSIONS ,BODY_TYPES} from "../api/vehicles";
+import { FUEL_TYPES, TRANSMISSIONS, BODY_TYPES } from "../api/vehicles";
 
 const BRANDS = [
   "Toyota",
@@ -275,7 +275,7 @@ export default function VehicleFilter({ filters, setFilters }: Props) {
           <select
             value={filters.year ?? ""}
             onChange={(e) => set({ year: e.target.value })}
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-400 transition-colors"
+            className=" w-full sm:w-auto max-w-full text-xs sm:text-sm px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-red-400 truncate"
           >
             <option value="">Tất cả năm</option>
             {YEARS.map((y) => (

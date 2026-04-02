@@ -78,7 +78,7 @@ export default function VehicleCard({
   return (
     <Link to={`/vehicles/${id}`} className="group block">
       <div
-        className={`bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border hover:-translate-y-1 ${
+        className={`bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 border hover:-translate-y-0.5 sm:hover:-translate-y-1 ${
           isReserved
             ? "border-amber-200"
             : isSold
@@ -87,7 +87,7 @@ export default function VehicleCard({
         }`}
       >
         {/* Image */}
-        <div className="relative overflow-hidden h-48 bg-gray-100">
+        <div className="relative overflow-hidden h-44 sm:h-48 bg-gray-100">
           <img
             src={image || "/placeholder-car.jpg"}
             alt={name}
@@ -114,7 +114,7 @@ export default function VehicleCard({
           {/* ── STATUS OVERLAY từ API ── */}
           {isReserved && (
             <div className="absolute bottom-3 left-3">
-              <span className="flex items-center gap-1.5 bg-amber-500 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md">
+              <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-500 text-white  font-bold  rounded-full shadow-md">
                 <Lock size={11} /> Đã đặt cọc
               </span>
             </div>
@@ -131,7 +131,7 @@ export default function VehicleCard({
           {/* Badge lịch hẹn — chỉ khi xe chưa bị khoá/bán */}
           {hasAppointment && !isReserved && !isSold && (
             <div className="absolute bottom-3 left-3">
-              <span className="flex items-center gap-1.5 bg-blue-600 text-white text-xs font-bold px-2.5 py-1.5 rounded-full shadow-md">
+              <span className="flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs px-2 sm:px-2.5 py-1 sm:py-1.5 bg-blue-600 text-white font-bold rounded-full shadow-md">
                 <CalendarCheck size={11} /> Có lịch hẹn
               </span>
             </div>
@@ -141,7 +141,7 @@ export default function VehicleCard({
         </div>
 
         {/* Info */}
-        <div className="p-4">
+        <div className="p-3 sm:p-4">
           <h3
             className={`font-bold text-sm mb-2 line-clamp-2 transition-colors leading-snug ${
               isSold
@@ -153,25 +153,25 @@ export default function VehicleCard({
           </h3>
 
           {/* Specs */}
-          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-gray-500 mb-3">
+          <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[10px] sm:text-xs text-gray-500 mb-3">
             {fuelLabel && (
-              <span className="flex items-center gap-1">
+              <span className="hidden sm:flex items-center gap-1">
                 <Fuel size={11} className="text-gray-400" /> {fuelLabel}
               </span>
             )}
             {fuelLabel && transmissionLabel && (
-              <span className="text-gray-300">|</span>
+              <span className="text-gray-300 hidden sm:inline">|</span>
             )}
             {transmissionLabel && (
-              <span className="flex items-center gap-1">
+              <span className="hidden sm:flex items-center gap-1">
                 <Settings size={11} className="text-gray-400" />{" "}
                 {transmissionLabel}
               </span>
             )}
             {km && (
               <>
-                <span className="text-gray-300">|</span>
-                <span className="flex items-center gap-1">
+                <span className="text-gray-300 hidden sm:inline">|</span>
+                <span className="hidden sm:flex items-center gap-1">
                   <Gauge size={11} className="text-gray-400" />
                   {Number(km).toLocaleString("vi-VN")} km
                 </span>
@@ -180,11 +180,11 @@ export default function VehicleCard({
           </div>
 
           {/* Price + CTA */}
-          <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+          <div className="flex items-center justify-between pt-2.5 sm:pt-3 border-t border-gray-100">
             <div>
               {/* Giá */}
               <span
-                className={`font-black text-lg leading-none ${
+                className={`font-black text-base sm:text-lg leading-none ${
                   isSold
                     ? "text-gray-400 line-through"
                     : isReserved
@@ -205,7 +205,7 @@ export default function VehicleCard({
                     e.stopPropagation();
                     addVehicle(id);
                   }}
-                  className={`mt-2 w-full flex items-center justify-center gap-1.5 text-xs py-1.5 rounded-lg border transition-all ${
+                  className={`mt-1.5 w-full flex items-center justify-center gap-1 text-[10px] sm:text-xs py-1 sm:py-1.5 rounded-lg border transition-all ${
                     inCompare
                       ? "bg-red-50 border-red-200 text-red-600 font-semibold"
                       : "border-gray-200 text-gray-500 hover:border-red-300 hover:text-red-600"
@@ -225,7 +225,7 @@ export default function VehicleCard({
               )}
 
               {isVerified && !isSold && (
-                <div className="flex items-center gap-1 mt-0.5">
+                <div className="hidden sm:flex items-center gap-1 mt-0.5">
                   <CheckCircle size={11} className="text-green-500" />
                   <span className="text-[10px] text-green-600 font-medium">
                     Đã kiểm định
@@ -236,13 +236,16 @@ export default function VehicleCard({
 
             {/* Xem chi tiết */}
             <span
-              className={`flex items-center gap-1 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-all ${
+              className={`ml-2 flex items-center gap-1 text-[10px] sm:text-xs font-medium px-2.5 py-1.5 shrink-0 rounded-lg transition-all ${
                 isSold
                   ? "text-gray-400 bg-gray-50"
                   : "text-gray-500 group-hover:text-red-600 bg-gray-50 group-hover:bg-red-50"
               }`}
             >
-              <Eye size={13} /> {isSold ? "Đã bán" : "Xem chi tiết"}
+              <Eye size={12} />{" "}
+              <span className="hidden sm:inline">
+                {isSold ? "Đã bán" : "Xem chi tiết"}{" "}
+              </span>
             </span>
           </div>
         </div>

@@ -225,11 +225,11 @@ export default function AppointmentForm({ vehicleId, vehicleName }: Props) {
   const remaining = MAX_SUBMIT - submitCount;
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 sm:p-5">
       {/* Header */}
       <div className="flex items-center gap-2.5 mb-5">
         <div className="w-9 h-9 bg-red-50 rounded-xl flex items-center justify-center shrink-0">
-          <Calendar size={17} className="text-red-600" />
+          <Calendar size={16} className="text-red-600" />
         </div>
         <div>
           <p className="font-bold text-gray-900 text-sm">Đặt lịch xem xe</p>
@@ -283,7 +283,7 @@ export default function AppointmentForm({ vehicleId, vehicleName }: Props) {
         </div>
 
         {/* Số điện thoại + Email */}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">
               Số điện thoại <span className="text-red-500">*</span>
