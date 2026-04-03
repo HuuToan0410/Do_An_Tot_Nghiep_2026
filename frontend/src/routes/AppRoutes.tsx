@@ -35,6 +35,8 @@ import AdminSalesOrdersPage from "../pages/admin/AdminSalesOrdersPage";
 import AdminWarrantiesPage from "../pages/admin/AdminWarrantiesPage";
 import AdminHandoversPage from "../pages/admin/Adminhandoverspage";
 import AdminInquiriesPage from "../pages/admin/AdminInquiriesPage";
+import AdminAuditLogPage from "../pages/admin/AdminAuditLogPage";
+import AdminListingsPage from "../pages/admin/AdminListingsPage";
 
 export default function AppRoutes() {
   return (
@@ -206,6 +208,15 @@ export default function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/admin/audit-logs"
+        element={
+          <ProtectedRoute allowedRoles={["ADMIN"]}>
+            <AdminAuditLogPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/admin/listings" element={<AdminListingsPage />} />
     </Routes>
   );
 }

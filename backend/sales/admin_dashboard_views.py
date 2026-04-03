@@ -3,7 +3,7 @@ from django.db.models.functions import ExtractQuarter, ExtractYear, TruncMonth, 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
-
+from rest_framework.pagination import PageNumberPagination
 from backend.sales.permissions import CanViewDashboard
 from vehicles.models import VehicleUnit, VehicleStatusLog
 from sales.models import Deposit, SalesOrder
@@ -258,3 +258,130 @@ class RevenueView(APIView):
                     if row["month"]
                 ]
             )
+
+""" -------------------------------------------------------------------------------------"""
+# ── Thêm vào sales/views.py hoặc admin_dashboard_views.py ────────
+# Patch AuditLogListView để hỗ trợ pagination + action filter
+
+
+
+class AuditLogPagination(PageNumberPagination):
+    page_size            = 20
+    page_size_query_param = "page_size"
+    max_page_size        = 100
+
+
+class AuditLogListView(generics.ListAPIView):
+    """
+    GET /api/admin/audit-logs/
+    Params:
+      - model:     tên model (VehicleUnit, Deposit, ...)
+      - object_id: ID của đối tượng
+      - action:    CREATE | UPDATE | DELETE | STATUS_CHANGE | APPROVE | REJECT
+      - search:    tìm trong description
+      - page:      trang
+      - page_size: số bản ghi/trang (mặc định 20)
+    """
+    serializer_class   = AuditLogSerializer
+    permission_classes = [CanViewAuditLog]   # chỉ ADMIN
+    pagination_class   = AuditLogPagination
+
+    def get_queryset(self):
+        qs = AuditLog.objects.select_related("user").order_by("-created_at")
+
+        model_name = self.request.query_params.get("model")
+        object_id  = self.request.query_params.get("object_id")
+        action     = self.request.query_params.get("action")
+        search     = self.request.query_params.get("search")
+
+        if model_name:
+            qs = qs.filter(model_name__iexact=model_name)
+        if object_id:
+            qs = qs.filter(object_id=object_id)
+        if action:
+            qs = qs.filter(action__iexact=action)
+        if search:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(description__icontains=search) |
+                Q(user__username__icontains=search) |
+                Q(user__first_name__icontains=search) |
+                Q(user__last_name__icontains=search)
+            )
+
+        return qs
+
+
+# ── AuditLogSerializer — thêm action_display và user_name ────────
+# Đã có trong sales/serializers.py, nhưng cần thêm action:
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    user_name      = serializers.SerializerMethodField()
+    action_display = serializers.CharField(source="get_action_display", read_only=True)
+
+    class Meta:
+        model  = AuditLog
+        fields = [
+            "id", "user", "user_name",
+            "action", "action_display",
+            "model_name", "object_id",
+            "description",
+            "old_value", "new_value",
+            "ip_address",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_user_name(self, obj):
+        if obj.user:
+            return obj.user.get_full_name() or obj.user.username
+        return "system"
+
+
+# ── sales/urls.py — đảm bảo đã có route ─────────────────────────
+# path("admin/audit-logs/", views.AuditLogListView.as_view(), name="audit-logs"),
+
+
+# ── sales/permissions.py — CanViewAuditLog ───────────────────────
+# Chỉ ADMIN mới xem audit log:
+
+class CanViewAuditLog(BasePermission):
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and request.user.role == "ADMIN"
+        )
+
+
+# ── Ghi AuditLog tự động — thêm helper ───────────────────────────
+# Dùng trong các view khi muốn ghi log:
+
+def log_action(user, action, model_name, object_id, description, old_value=None, new_value=None, request=None):
+    """
+    Helper ghi AuditLog.
+    Ví dụ:
+        log_action(
+            user=request.user,
+            action="DELETE",
+            model_name="VehicleUnit",
+            object_id=vehicle.id,
+            description=f"Đã xóa xe {vehicle.display_name}",
+            request=request,
+        )
+    """
+    ip = None
+    if request:
+        x_forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
+        ip = x_forwarded.split(",")[0].strip() if x_forwarded else request.META.get("REMOTE_ADDR")
+
+    AuditLog.objects.create(
+        user=user,
+        action=action,
+        model_name=model_name,
+        object_id=object_id,
+        description=description,
+        old_value=old_value,
+        new_value=new_value,
+        ip_address=ip,
+    )

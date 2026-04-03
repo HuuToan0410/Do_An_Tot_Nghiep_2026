@@ -18,6 +18,7 @@ import {
   Shield,
   MapPin,
   MessageSquare,
+  Newspaper,
 } from "lucide-react";
 import { useAuthStore } from "../store/authStore";
 import type { UserRole } from "../api/auth";
@@ -114,17 +115,29 @@ const NAV_ITEMS: NavItem[] = [
     icon: <Shield size={18} />,
     allowedRoles: ["ADMIN", "SALES"],
   },
-  /* {
+  {
     to: "/admin/handovers",
     label: "Bàn giao xe",
     icon: <MapPin size={18} />,
     allowedRoles: ["ADMIN", "SALES"],
-  }, */
+  },
   {
     to: "/admin/inquiries",
     label: "Yêu cầu",
     icon: <MessageSquare size={18} />,
     allowedRoles: ["ADMIN", "SALES"],
+  },
+  {
+    to: "/admin/audit-logs",
+    label: "Nhật ký hệ thống",
+    icon: <Shield />,
+    allowedRoles: ["ADMIN"],
+  },
+  {
+    to: "/admin/listings",
+    label: "Quản lý niêm yết",
+    icon: <Newspaper />,
+    allowedRoles: ["ADMIN","SALES"],
   },
 ];
 

@@ -97,7 +97,7 @@ urlpatterns = [
     ),
     # ── Handover ───────────────────────────────────────────────
     path("handovers/", views.HandoverListView.as_view()),
-    path("handovers/", views.HandoverCreateView.as_view(), name="handover-create"),
+    path("handovers/create/", views.HandoverCreateView.as_view(), name="handover-create"),
     path(
         "handovers/<int:pk>/",
         views.HandoverDetailView.as_view(),

@@ -110,7 +110,7 @@ function CreateHandoverModal({ onClose, onSuccess }: { onClose: () => void; onSu
   const mut = useMutation({
     mutationFn: async () => {
       // HandoverSerializer fields: sales_order, handover_date, mileage_at_handover, note
-      const res = await api.post("/handovers/", {
+      const res = await api.post("/handovers/create/", {
         sales_order:        Number(salesOrderId),
         handover_date:      handoverDate,
         mileage_at_handover: Number(mileage),
