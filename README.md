@@ -3,7 +3,7 @@
 ## Mô tả
 Hệ thống quản lý và mua bán xe cũ.
 
-## 🛠 Công nghệ sử dụng
+## Công nghệ sử dụng
 - Python
 - Django / FastAPI (ghi đúng framework bạn dùng)
 - PostgreSQL
