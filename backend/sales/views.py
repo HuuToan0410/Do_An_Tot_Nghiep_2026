@@ -4,6 +4,7 @@ from rest_framework import generics, permissions, status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from sales.audit_mixin import log_action
 from sales.momo import create_momo_payment, verify_ipn
 from vehicles.models import VehicleStatusLog, VehicleUnit
 from django.db.models import Sum, Count, Q
@@ -157,8 +158,21 @@ class PricingApproveView(APIView):
         pricing.status = VehiclePricing.Status.APPROVED
         if note:
             pricing.note = note
+        old_status = pricing.status
         pricing.save()
-
+        log_action(
+            user=request.user,
+            action="APPROVE",
+            model_name="VehiclePricing",
+            object_id=pricing.pk,
+            description=f"Phê duyệt định giá #{pricing.id} xe {pricing.vehicle}",
+            old_value={"status": old_status},
+            new_value={
+                "status": pricing.status,
+                "approved_price": str(approved_price),
+            },
+            request=request,
+        )
         # ── Cập nhật sale_price xe ─────────────────────────────
         vehicle = pricing.vehicle
         vehicle.sale_price = approved_price
@@ -200,7 +214,20 @@ class PricingRejectView(APIView):
             pricing.note = f"[Từ chối] {note}"
         pricing.approved_by = request.user
         pricing.approved_at = timezone.now()
+        old_status = pricing.status
+
         pricing.save()
+
+        log_action(
+            user=request.user,
+            action="REJECT",
+            model_name="VehiclePricing",
+            object_id=pricing.pk,
+            description=f"Từ chối định giá #{pricing.id} xe {pricing.vehicle}",
+            old_value={"status": old_status},
+            new_value={"status": pricing.status},
+            request=request,
+        )
 
         return Response({"message": "Đã từ chối phiếu định giá."})
 
@@ -232,6 +259,15 @@ class ListingCreateView(generics.CreateAPIView):
             new_status=VehicleUnit.Status.LISTED,
             changed_by=self.request.user,
             note="Đã niêm yết lên website.",
+        )
+        log_action(
+            user=self.request.user,
+            action="CREATE",
+            model_name="Listing",
+            object_id=listing.pk,
+            description=f"Niêm yết xe {vehicle}",
+            new_value={"vehicle": vehicle.pk},
+            request=self.request,
         )
 
 
@@ -388,6 +424,16 @@ class DepositConfirmView(APIView):
             changed_by=request.user,
             note=f"Đặt cọc #{deposit.pk} được xác nhận.",
         )
+        log_action(
+            user=request.user,
+            action="APPROVE",
+            model_name="Deposit",
+            object_id=deposit.pk,
+            description=f"Xác nhận đặt cọc #{deposit.id} xe {deposit.vehicle}",
+            old_value={"status": "PENDING"},
+            new_value={"status": "CONFIRMED"},
+            request=request,
+        )
 
         return Response({"message": "Xác nhận đặt cọc thành công. Xe đã được khóa."})
 
@@ -405,9 +451,19 @@ class DepositCancelView(APIView):
             )
 
         was_confirmed = deposit.status == Deposit.Status.CONFIRMED
+        old_status = deposit.status
         deposit.status = Deposit.Status.CANCELLED
         deposit.save(update_fields=["status", "updated_at"])
-
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="Deposit",
+            object_id=deposit.pk,
+            description=f"Hủy đặt cọc #{deposit.id} xe {deposit.vehicle}",
+            old_value={"status": old_status},
+            new_value={"status": "CANCELLED"},
+            request=request,
+        )
         if was_confirmed:
             vehicle = deposit.vehicle
             old_status = vehicle.status
@@ -444,6 +500,18 @@ class SalesOrderListView(generics.ListCreateAPIView):
             new_status=VehicleUnit.Status.SOLD,
             changed_by=self.request.user,
             note=f"Đơn bán #{order.contract_number}.",
+        )
+        log_action(
+            user=self.request.user,
+            action="CREATE",
+            model_name="SalesOrder",
+            object_id=order.pk,
+            description=f"Tạo đơn bán #{order.contract_number}",
+            new_value={
+                "vehicle": order.vehicle.pk,
+                "price": str(order.sale_price),
+            },
+            request=self.request,
         )
 
 
@@ -888,12 +956,32 @@ class MoMoIPNView(APIView):
                     new_status="RESERVED",
                     note=f"Đặt cọc MoMo #{deposit.id} thành công (transId: {trans_id})",
                 )
+                log_action(
+                    user=None,
+                    action="APPROVE",
+                    model_name="Deposit",
+                    object_id=deposit.pk,
+                    description=f"MoMo thanh toán thành công #{deposit.id}",
+                    old_value={"status": "PENDING"},
+                    new_value={"status": "CONFIRMED"},
+                    request=request,
+                )
 
         else:
             # Thanh toán thất bại / hủy
             if deposit.status == Deposit.Status.PENDING:
                 deposit.status = Deposit.Status.CANCELLED
                 deposit.save(update_fields=["status"])
+                log_action(
+                    user=None,
+                    action="STATUS_CHANGE",
+                    model_name="Deposit",
+                    object_id=deposit.pk,
+                    description=f"MoMo thanh toán thất bại #{deposit.id}",
+                    old_value={"status": "PENDING"},
+                    new_value={"status": "CANCELLED"},
+                    request=request,
+                )
 
         # MoMo yêu cầu trả về 200 để xác nhận đã nhận IPN
         return Response({"message": "OK"}, status=200)

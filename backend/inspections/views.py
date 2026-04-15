@@ -3,6 +3,7 @@ from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db.models import Q
+from sales.audit_mixin import AuditLogMixin, log_action
 from inspections.models import Inspection, InspectionCategory, InspectionItem
 from inspections.permissions import (
     CanCompleteInspection,
@@ -19,7 +20,7 @@ from inspections.serializers import (
     InspectionItemCreateSerializer,
     InspectionItemSerializer,
     InspectionListSerializer,
-    InspectionPublicSerializer
+    InspectionPublicSerializer,
 )
 
 
@@ -31,13 +32,14 @@ class InspectionCategoryListView(generics.ListCreateAPIView):
     queryset = InspectionCategory.objects.all()
 
 
-class InspectionListView(generics.ListCreateAPIView):
+class InspectionListView(AuditLogMixin, generics.ListCreateAPIView):
     """
     GET  /api/inspections/   — danh sách (admin/inspector)
     POST /api/inspections/   — tạo phiếu mới
     """
 
     permission_classes = [permissions.IsAuthenticated]
+    audit_model_name = "Inspection"
 
     def get_serializer_class(self):
         if self.request.method == "POST":
@@ -81,11 +83,12 @@ class InspectionCreateView(generics.CreateAPIView):
     permission_classes = [CanCreateInspection]
 
 
-class InspectionDetailView(generics.RetrieveUpdateAPIView):
+class InspectionDetailView(AuditLogMixin, generics.RetrieveUpdateAPIView):
     """GET / PATCH /api/inspections/<id>/"""
 
     serializer_class = InspectionDetailSerializer
     permission_classes = [permissions.IsAuthenticated]
+    audit_model_name = "Inspection"
 
     def get_queryset(self):
         return Inspection.objects.select_related(
@@ -93,11 +96,12 @@ class InspectionDetailView(generics.RetrieveUpdateAPIView):
         ).prefetch_related("items__category")
 
 
-class InspectionDeleteView(generics.DestroyAPIView):
+class InspectionDeleteView(AuditLogMixin, generics.DestroyAPIView):
     """DELETE /api/inspections/<id>/"""
 
     permission_classes = [permissions.IsAuthenticated]
     queryset = Inspection.objects.all()
+    audit_model_name = "Inspection"
 
 
 class InspectionStatusUpdateView(APIView):
@@ -116,8 +120,19 @@ class InspectionStatusUpdateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        old_status = inspection.status
         inspection.status = new_status
         inspection.save(update_fields=["status", "updated_at"])
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="Inspection",
+            object_id=inspection.id,
+            description=f"Inspection #{inspection.id}: {old_status} → {new_status}",
+            old_value={"status": old_status},
+            new_value={"status": new_status},
+            request=request,
+        )
 
         return Response(
             InspectionListSerializer(
@@ -168,9 +183,19 @@ class InspectionPublishView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        old_value = inspection.is_public
         inspection.is_public = is_public
         inspection.save(update_fields=["is_public"])
-
+        log_action(
+            user=request.user,
+            action="APPROVE" if is_public else "REJECT",
+            model_name="Inspection",
+            object_id=inspection.id,
+            description=f"{'Công khai' if is_public else 'Ẩn'} inspection #{inspection.id}",
+            old_value={"is_public": old_value},
+            new_value={"is_public": is_public},
+            request=request,
+        )
         action = "Công khai" if is_public else "Ẩn"
         return Response(
             {
@@ -206,6 +231,15 @@ class InspectionItemView(APIView):
         serializer = InspectionItemCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         item = serializer.save(inspection=inspection)
+        log_action(
+            user=request.user,
+            action="CREATE",
+            model_name="InspectionItem",
+            object_id=item.id,
+            description=f"Thêm hạng mục '{item.name}' vào inspection #{inspection.id}",
+            new_value={"inspection": inspection.id, "name": item.name},
+            request=request,
+        )
 
         return Response(
             InspectionItemSerializer(item).data,
@@ -213,7 +247,7 @@ class InspectionItemView(APIView):
         )
 
 
-class InspectionItemDetailView(generics.RetrieveUpdateDestroyAPIView):
+class InspectionItemDetailView(AuditLogMixin, generics.RetrieveUpdateDestroyAPIView):
     """
     Xem / cập nhật / xóa hạng mục kiểm định.
     Chặn thao tác nếu phiếu cha đã hoàn thành.
@@ -221,6 +255,7 @@ class InspectionItemDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     serializer_class = InspectionItemSerializer
     permission_classes = [CanManageInspectionItem]
+    audit_model_name = "InspectionItem"
     queryset = InspectionItem.objects.select_related("inspection", "category")
 
     def get_object(self):
@@ -285,8 +320,22 @@ class InspectionCompleteView(APIView):
         )
         inspection.conclusion = request.data.get("conclusion", "")
         inspection.recommendation = request.data.get("recommendation", "")
+        old_status = inspection.status
         inspection.save()
-
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="Inspection",
+            object_id=inspection.id,
+            description=f"Hoàn thành inspection #{inspection.id}: {old_status} → {inspection.status}",
+            old_value={"status": old_status},
+            new_value={
+                "status": inspection.status,
+                "overall_score": inspection.overall_score,
+                "quality_grade": inspection.quality_grade,
+            },
+            request=request,
+        )
         return Response(InspectionDetailSerializer(inspection).data)
 
 
@@ -295,13 +344,12 @@ class InspectionCompleteView(APIView):
 
 class VehiclePublicInspectionView(APIView):
     """GET /api/vehicles/<vehicle_id>/inspection/"""
- 
+
     permission_classes = [permissions.AllowAny]
- 
+
     def get(self, request, vehicle_id):
         inspection = (
-            Inspection.objects
-            .filter(
+            Inspection.objects.filter(
                 vehicle_id=vehicle_id,
                 is_public=True,
                 status=Inspection.Status.COMPLETED,
@@ -311,11 +359,11 @@ class VehiclePublicInspectionView(APIView):
             .order_by("-inspection_date")
             .first()
         )
- 
+
         if not inspection:
             return Response(
                 {"detail": "Chưa có phiếu kiểm định công khai cho xe này."},
                 status=status.HTTP_404_NOT_FOUND,
             )
- 
+
         return Response(InspectionPublicSerializer(inspection).data)

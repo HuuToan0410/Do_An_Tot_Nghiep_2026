@@ -1,19 +1,3 @@
-# management/commands/seed_data.py
-# python manage.py seed_data --clear --vehicles 200
-#
-# Tạo tối thiểu 200 xe với đầy đủ tất cả trường hợp:
-# - Vehicles: tất cả 11 status
-# - Inspections: COMPLETED/FAILED/IN_PROGRESS + đủ items theo category
-# - Refurbishments: PENDING/IN_PROGRESS/COMPLETED/CANCELLED
-# - Pricings: PENDING/APPROVED/REJECTED
-# - Listings: is_active=True/False, is_featured
-# - Appointments: PENDING/CONFIRMED/COMPLETED/CANCELLED/NO_SHOW
-# - Deposits: PENDING/CONFIRMED/CANCELLED/REFUNDED/CONVERTED + MoMo fields
-# - SalesOrders: rải đều 24 tháng
-# - HandoverRecords: đầy đủ
-# - WarrantyRecords: ACTIVE/ACTIVE sắp hết/EXPIRED/VOID
-# - SellInquiry + ContactInquiry
-
 import os
 import random
 from decimal import Decimal
@@ -30,13 +14,13 @@ from refurbishment.models import RefurbishmentItem, RefurbishmentOrder
 from sales.models import (
     Appointment, Deposit, HandoverRecord, Listing,
     SalesOrder, VehiclePricing, WarrantyRecord,
-    SellInquiry, ContactInquiry,
+    SellInquiry, ContactInquiry, AuditLog, Favorite, # <-- Thêm AuditLog, Favorite
 )
 from vehicles.models import VehicleMedia, VehicleSpec, VehicleStatusLog, VehicleUnit
 
 User = get_user_model()
 fake = Faker("vi_VN")
-random.seed(42)  # reproducible
+random.seed(42)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -64,7 +48,6 @@ VARIANTS     = ["1.5L", "2.0L", "2.5L", "Turbo", "Premium", "Luxury", "Sport",
 FUEL_TYPES   = ["GASOLINE", "GASOLINE", "GASOLINE", "DIESEL", "HYBRID", "ELECTRIC"]
 TRANSMISSIONS = ["AUTOMATIC", "AUTOMATIC", "MANUAL", "CVT"]
 
-# Tỷ lệ phân bổ status — tổng 80 unit, scale theo count
 STATUS_RATIOS = {
     "PURCHASED":       5,
     "WAIT_INSPECTION": 5,
@@ -73,11 +56,11 @@ STATUS_RATIOS = {
     "WAIT_REFURBISH":  6,
     "REFURBISHING":    4,
     "READY_FOR_SALE":  10,
-    "LISTED":          25,   # nhiều nhất — hiện trên trang chủ
-    "RESERVED":        8,    # xe đã đặt cọc
-    "SOLD":            20,   # xe đã bán — cần SalesOrder
-    "WARRANTY":        7,    # xe đang bảo hành
-}  # total = 100
+    "LISTED":          25,
+    "RESERVED":        8,
+    "SOLD":            20,
+    "WARRANTY":        7,
+}
 
 REFURB_ITEMS = [
     ("Thay dầu máy",        "LABOR"),
@@ -99,7 +82,7 @@ REFURB_ITEMS = [
 
 
 class Command(BaseCommand):
-    help = "Seed tối thiểu 200 xe với đầy đủ tất cả trường hợp"
+    help = "Seed tối thiểu 200 xe với đầy đủ tất cả trường hợp, bao gồm AuditLog và Favorite"
 
     def add_arguments(self, parser):
         parser.add_argument("--clear",    action="store_true", help="Xóa dữ liệu cũ")
@@ -107,7 +90,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         clear      = kwargs["clear"]
-        n_vehicles = max(kwargs["vehicles"], 200)  # tối thiểu 200
+        n_vehicles = max(kwargs["vehicles"], 200)
 
         if clear:
             self.stdout.write(self.style.WARNING("Xóa dữ liệu cũ..."))
@@ -157,6 +140,12 @@ class Command(BaseCommand):
         self.create_inquiries()
         self.stdout.write("  ✓ SellInquiry + ContactInquiry")
 
+        self.create_favorites(vehicles, users)
+        self.stdout.write("  ✓ Favorites")
+
+        self.create_audit_logs(users)
+        self.stdout.write("  ✓ Audit logs")
+
         self.stdout.write(self.style.SUCCESS("\n✅ Seed hoàn tất!"))
         self._print_summary()
 
@@ -196,7 +185,6 @@ class Command(BaseCommand):
                     u.save(update_fields=["password"])
                 users[role].append(u)
 
-        # Admin mặc định
         admin, c = User.objects.get_or_create(
             username="admin1",
             defaults=dict(
@@ -227,14 +215,14 @@ class Command(BaseCommand):
     def create_vehicles(self, count, users):
         purchasing_users = users["PURCHASING"] + users["ADMIN"]
 
-        # Xây pool status theo tỷ lệ
         pool = []
         for st, ratio in STATUS_RATIOS.items():
             pool.extend([st] * ratio)
-        # Scale pool lên count
+        
         pool_extended = []
         while len(pool_extended) < count:
             pool_extended.extend(pool)
+        
         random.shuffle(pool_extended)
         status_list = pool_extended[:count]
 
@@ -292,10 +280,9 @@ class Command(BaseCommand):
                 ),
             )
 
-            # VehicleStatusLog — 1-3 entries cho lịch sử
             self._create_status_logs(v, status, purchasing_users)
-
             vehicles.append(v)
+            
         return vehicles
 
     def _create_status_logs(self, vehicle, final_status, users):
@@ -371,7 +358,6 @@ class Command(BaseCommand):
             if Inspection.objects.filter(vehicle=v).exists():
                 continue
 
-            # Xe INSPECTING có 1 phiếu IN_PROGRESS
             if v.status == "INSPECTING":
                 Inspection.objects.create(
                     vehicle=v, inspector=random.choice(inspectors),
@@ -381,11 +367,9 @@ class Command(BaseCommand):
                 )
                 continue
 
-            # Xe chưa qua kiểm định → skip
             if v.status in ["PURCHASED", "WAIT_INSPECTION"]:
                 continue
 
-            # Tất cả xe còn lại có phiếu hoàn chỉnh
             score = round(random.uniform(4.5, 9.9), 1)
             grade = "A" if score >= 8.5 else "B" if score >= 7.0 else "C" if score >= 5.0 else "D"
             has_failed_item = random.random() < 0.15
@@ -413,7 +397,6 @@ class Command(BaseCommand):
                 is_public=(insp_status == "COMPLETED" and random.random() > 0.1),
             )
 
-            # Tạo items theo từng category
             for cat in categories:
                 item_score = random.randint(4, 10)
                 if has_failed_item and cat.name in ("Động cơ", "Hệ thống phanh") and random.random() > 0.5:
@@ -481,7 +464,6 @@ class Command(BaseCommand):
                 note=fake.sentence(),
             )
 
-            # 3-8 hạng mục ngẫu nhiên
             chosen = random.sample(REFURB_ITEMS, random.randint(3, 8))
             for name, itype in chosen:
                 qty = random.choice([1, 1, 2, 4])
@@ -552,8 +534,8 @@ class Command(BaseCommand):
 
             price    = v.sale_price or (v.purchase_price + Decimal(50_000_000))
             scenario = hash(v.vin) % 10
-            is_active   = scenario != 0   # 10% inactive
-            is_featured = scenario in (1, 2, 3)  # 30% featured
+            is_active   = scenario != 0
+            is_featured = scenario in (1, 2, 3)
 
             Listing.objects.create(
                 vehicle=v,
@@ -574,8 +556,7 @@ class Command(BaseCommand):
     def create_appointments(self, vehicles, users):
         """
         Đầy đủ 5 trạng thái: PENDING / CONFIRMED / COMPLETED / CANCELLED / NO_SHOW
-        Đảm bảo xe LISTED có ít nhất 1 lịch hẹn PENDING hoặc CONFIRMED
-        để badge hiển thị trên card.
+        Đảm bảo xe LISTED có ít nhất 1 lịch hẹn PENDING hoặc CONFIRMED để badge hiển thị trên card.
         """
         customers = users["CUSTOMER"]
         sales     = users["SALES"]
@@ -584,7 +565,6 @@ class Command(BaseCommand):
         reserved = [v for v in vehicles if v.status == "RESERVED"]
         all_bookable = listed + reserved
 
-        # ── Mỗi xe LISTED: 40% có PENDING, 30% có CONFIRMED ───────
         for v in listed:
             r = hash(v.vin) % 10
             if r < 4:
@@ -592,7 +572,7 @@ class Command(BaseCommand):
             elif r < 7:
                 status_appt = "CONFIRMED"
             else:
-                continue  # 30% không có lịch hẹn hiện tại
+                continue
 
             cust = random.choice(customers)
             Appointment.objects.get_or_create(
@@ -609,7 +589,6 @@ class Command(BaseCommand):
                 ),
             )
 
-        # ── Lịch hẹn cũ (COMPLETED / CANCELLED / NO_SHOW) ─────────
         STATUS_POOL = (
             ["COMPLETED"] * 5 + ["CANCELLED"] * 3 + ["NO_SHOW"] * 2
         )
@@ -630,7 +609,6 @@ class Command(BaseCommand):
                 handled_by=(random.choice(sales) if st in ("COMPLETED","NO_SHOW") else None),
             )
 
-        # ── Thêm lịch hẹn tương lai đa dạng ──────────────────────
         for _ in range(60):
             v    = random.choice(all_bookable)
             cust = random.choice(customers)
@@ -656,7 +634,6 @@ class Command(BaseCommand):
         customers = users["CUSTOMER"]
         sales     = users["SALES"]
 
-        # ── Xe RESERVED bắt buộc có CONFIRMED ────────────────────
         for v in [x for x in vehicles if x.status == "RESERVED"]:
             if Deposit.objects.filter(vehicle=v, status="CONFIRMED").exists():
                 continue
@@ -674,7 +651,6 @@ class Command(BaseCommand):
                 momo_trans_id=f"TRANS_{random.randint(100000000, 999999999)}",
             )
 
-        # ── Pool 5 status ─────────────────────────────────────────
         STATUS_POOL = (
             ["PENDING"]   * 10 +
             ["CONFIRMED"] * 5  +
@@ -690,7 +666,6 @@ class Command(BaseCommand):
             target = random.choice(listed_sold)
             days   = random.randint(0, 180)
 
-            # Không CONFIRMED thứ 2 trên cùng 1 xe
             if status == "CONFIRMED" and Deposit.objects.filter(vehicle=target, status="CONFIRMED").exists():
                 status = "PENDING"
 
@@ -722,7 +697,6 @@ class Command(BaseCommand):
         now         = timezone.now()
 
         sold_vehicles = [v for v in vehicles if v.status in ["SOLD", "WARRANTY"]]
-        # Bổ sung thêm xe LISTED/RESERVED để đủ đơn nếu cần
         if len(sold_vehicles) < 60:
             extras = [v for v in vehicles if v.status not in ["SOLD","WARRANTY"] and v.sale_price]
             random.shuffle(extras)
@@ -736,12 +710,10 @@ class Command(BaseCommand):
             seller     = random.choice(sales_users)
             price      = v.sale_price or Decimal(random.randint(200_000_000, 900_000_000))
 
-            # Rải sold_at đều qua 24 tháng
             months_ago  = idx % 24
             days_offset = random.randint(0, 27)
             sold_at     = now - timedelta(days=months_ago * 30 + days_offset)
 
-            # Tạo deposit CONVERTED nếu xe có deposit cũ
             dep = Deposit.objects.filter(vehicle=v, status="CONFIRMED").first()
             if dep:
                 dep.status = "CONVERTED"
@@ -771,7 +743,7 @@ class Command(BaseCommand):
         """
         sales = users["SALES"]
         orders = list(SalesOrder.objects.filter(handover__isnull=True).select_related("vehicle"))
-        # Chỉ tạo cho 70%
+        
         for order in orders[:int(len(orders) * 0.7)]:
             HandoverRecord.objects.get_or_create(
                 sales_order=order,
@@ -863,7 +835,7 @@ class Command(BaseCommand):
                 mileage=f"{random.randint(10,200):,}000 km",
                 expected_price=f"{random.randint(200,700)} triệu",
                 note=fake.sentence() if random.random() > 0.5 else "",
-                is_contacted=(i % 3 != 0),  # 2/3 đã liên hệ
+                is_contacted=(i % 3 != 0),
             )
 
         for i in range(20):
@@ -872,8 +844,175 @@ class Command(BaseCommand):
                 phone=f"09{random.randint(10000000,99999999)}" if random.random() > 0.2 else "",
                 email=fake.email() if random.random() > 0.3 else "",
                 message=fake.text(200),
-                is_contacted=(i % 4 != 0),  # 75% đã liên hệ
+                is_contacted=(i % 4 != 0),
             )
+
+    # ── FAVORITES (THÊM MỚI) ──────────────────────────────────────
+
+    def create_favorites(self, vehicles, users):
+        """Tạo Favorite ngẫu nhiên cho các xe đang LISTED, RESERVED."""
+        customers = users["CUSTOMER"]
+        eligible_vehicles = [v for v in vehicles if v.status in ["LISTED", "RESERVED"]]
+        
+        for vehicle in eligible_vehicles:
+            # Ngẫu nhiên từ 0 đến 3 favorite cho mỗi xe
+            for cust in random.sample(customers, k=random.randint(0, 3)):
+                Favorite.objects.get_or_create(user=cust, vehicle=vehicle)
+
+    # ── AUDIT LOGS (THÊM MỚI) ─────────────────────────────────────
+
+    def create_audit_logs(self, users):
+        """Tạo AuditLog mẫu cho nhiều loại thao tác khác nhau"""
+        admin      = random.choice(users["ADMIN"])
+        purchasing = random.choice(users["PURCHASING"])
+        inspector  = random.choice(users["INSPECTOR"])
+        technician = random.choice(users["TECHNICIAN"])
+        pricing_u  = random.choice(users["PRICING"])
+        sales1     = random.choice(users["SALES"])
+
+        vehicles = list(VehicleUnit.objects.order_by("?")[:20])
+        if not vehicles:
+            return
+
+        sample_actions = []
+
+        for v in vehicles:
+            vname = f"{v.brand} {v.model} {v.year}"
+
+            sample_actions.append(dict(
+                user=purchasing,
+                action="CREATE",
+                model_name="VehicleUnit",
+                object_id=v.id,
+                description=f"Thu mua xe {vname}",
+                old_value=None,
+                new_value={"brand": v.brand, "model": v.model, "year": v.year,
+                           "purchase_price": str(v.purchase_price), "mileage": str(v.mileage)},
+                days_ago=random.randint(60, 180),
+            ))
+
+            for old_s, new_s, user, action_type in [
+                ("PURCHASED",     "WAIT_INSPECTION", purchasing, "STATUS_CHANGE"),
+                ("WAIT_INSPECTION","INSPECTING",      inspector,  "STATUS_CHANGE"),
+                ("INSPECTING",    "INSPECTED",        inspector,  "STATUS_CHANGE"),
+                ("INSPECTED",     "WAIT_REFURBISH",   inspector,  "STATUS_CHANGE"),
+                ("WAIT_REFURBISH","REFURBISHING",     technician, "STATUS_CHANGE"),
+                ("REFURBISHING",  "READY_FOR_SALE",   technician, "STATUS_CHANGE"),
+                ("READY_FOR_SALE","LISTED",           sales1,     "STATUS_CHANGE"),
+            ]:
+                sample_actions.append(dict(
+                    user=user,
+                    action=action_type,
+                    model_name="VehicleUnit",
+                    object_id=v.id,
+                    description=f"Xe {vname}: {old_s} → {new_s}",
+                    old_value={"status": old_s},
+                    new_value={"status": new_s},
+                    days_ago=random.randint(1, 60),
+                ))
+
+        for insp in Inspection.objects.order_by("?")[:10]:
+            vname = f"{insp.vehicle.brand} {insp.vehicle.model}"
+            sample_actions += [
+                dict(user=inspector, action="CREATE", model_name="Inspection",
+                     object_id=insp.id, description=f"Tạo phiếu kiểm định xe {vname}",
+                     old_value=None, new_value={"vehicle_id": insp.vehicle.id, "status": "IN_PROGRESS"},
+                     days_ago=random.randint(10, 50)),
+                dict(user=inspector, action="STATUS_CHANGE", model_name="Inspection",
+                     object_id=insp.id, description=f"Hoàn tất kiểm định xe {vname}",
+                     old_value={"status": "IN_PROGRESS"}, new_value={"status": "COMPLETED"},
+                     days_ago=random.randint(5, 20)),
+                dict(user=inspector, action="APPROVE", model_name="Inspection",
+                     object_id=insp.id, description=f"Công khai kết quả kiểm định xe {vname}",
+                     old_value={"is_public": False}, new_value={"is_public": True},
+                     days_ago=random.randint(1, 10)),
+            ]
+
+        for pricing in VehiclePricing.objects.order_by("?")[:8]:
+            vname = f"{pricing.vehicle.brand} {pricing.vehicle.model}"
+            sample_actions += [
+                dict(user=pricing_u, action="CREATE", model_name="VehiclePricing",
+                     object_id=pricing.id, description=f"Tạo phiếu định giá xe {vname}",
+                     old_value=None, new_value={"target_price": str(pricing.target_price), "status": "PENDING"},
+                     days_ago=random.randint(5, 30)),
+                dict(user=admin, action="APPROVE", model_name="VehiclePricing",
+                     object_id=pricing.id, description=f"Phê duyệt giá xe {vname}: {int(float(pricing.approved_price or 0)/1e6)}M",
+                     old_value={"status": "PENDING", "approved_price": None},
+                     new_value={"status": "APPROVED", "approved_price": str(pricing.approved_price)},
+                     days_ago=random.randint(1, 10)),
+            ]
+
+        sample_actions.append(dict(
+            user=admin, action="REJECT", model_name="VehiclePricing",
+            object_id=99, description="Từ chối định giá: Giá đề xuất quá cao so với thị trường",
+            old_value={"status": "PENDING", "target_price": "850000000"},
+            new_value={"status": "REJECTED", "note": "Thị trường hiện tại chỉ ở mức 700-750 triệu"},
+            days_ago=random.randint(5, 20),
+        ))
+
+        for dep in Deposit.objects.order_by("?")[:8]:
+            vname = f"{dep.vehicle.brand} {dep.vehicle.model}"
+            sample_actions += [
+                dict(user=dep.customer or sales1, action="CREATE", model_name="Deposit",
+                     object_id=dep.id, description=f"Đặt cọc xe {vname} — {dep.customer_name}",
+                     old_value=None, new_value={"amount": str(dep.amount), "status": "PENDING"},
+                     days_ago=random.randint(1, 30)),
+                dict(user=sales1, action="APPROVE", model_name="Deposit",
+                     object_id=dep.id, description=f"Xác nhận cọc xe {vname} — {dep.customer_name}",
+                     old_value={"status": "PENDING"}, new_value={"status": "CONFIRMED"},
+                     days_ago=random.randint(1, 15)),
+            ]
+
+        for cust in users["CUSTOMER"][:3]:
+            sample_actions.append(dict(
+                user=admin, action="UPDATE", model_name="User",
+                object_id=cust.id,
+                description=f"Cập nhật thông tin KH {cust.first_name} {cust.last_name}",
+                old_value={"is_verified": False}, new_value={"is_verified": True},
+                days_ago=random.randint(1, 30),
+            ))
+
+        sample_actions.append(dict(
+            user=sales1, action="DELETE", model_name="Appointment",
+            object_id=999, description="Xóa lịch hẹn trùng của khách 0900123456",
+            old_value={"customer_phone": "0900123456", "status": "PENDING"},
+            new_value=None, days_ago=random.randint(1, 10),
+        ))
+
+        for ro in RefurbishmentOrder.objects.order_by("?")[:6]:
+            vname = f"{ro.vehicle.brand} {ro.vehicle.model}"
+            sample_actions += [
+                dict(user=technician, action="CREATE", model_name="RefurbishmentOrder",
+                     object_id=ro.id, description=f"Tạo lệnh tân trang xe {vname}",
+                     old_value=None, new_value={"status": "IN_PROGRESS"},
+                     days_ago=random.randint(10, 40)),
+                dict(user=technician, action="STATUS_CHANGE", model_name="RefurbishmentOrder",
+                     object_id=ro.id, description=f"Hoàn tất tân trang xe {vname}",
+                     old_value={"status": "IN_PROGRESS"}, new_value={"status": "COMPLETED"},
+                     days_ago=random.randint(1, 10)),
+            ]
+
+        objs = []
+        ips = ["192.168.1.1","10.0.0.5","192.168.1.15","10.0.0.22","127.0.0.1"]
+        for act in sample_actions:
+            days = act.pop("days_ago", 0)
+            created_at = timezone.now() - timedelta(
+                days=days,
+                hours=random.randint(0, 23),
+                minutes=random.randint(0, 59),
+            )
+            obj = AuditLog(
+                **act,
+                ip_address=random.choice(ips),
+            )
+            obj.created_at = created_at
+            objs.append(obj)
+
+        created = AuditLog.objects.bulk_create(objs, ignore_conflicts=True)
+        
+        for obj, src in zip(created, objs):
+            if obj.pk:
+                AuditLog.objects.filter(pk=obj.pk).update(created_at=src.created_at)
 
     # ── SUMMARY ───────────────────────────────────────────────────
 
@@ -882,7 +1021,6 @@ class Command(BaseCommand):
         self.stdout.write("📊 TÓM TẮT DATABASE")
         self.stdout.write("─"*55)
 
-        # Vehicles
         total = VehicleUnit.objects.count()
         self.stdout.write(f"\n🚗 Vehicles: {total}")
         for st in ["PURCHASED","WAIT_INSPECTION","INSPECTING","INSPECTED",
@@ -892,7 +1030,6 @@ class Command(BaseCommand):
             bar = "█" * (cnt // 2)
             self.stdout.write(f"   {st:<20} {cnt:>4}  {bar}")
 
-        # Others
         self.stdout.write(f"\n👤 Users:          {User.objects.count()}")
         self.stdout.write(f"🔍 Inspections:    {Inspection.objects.count()}")
         self.stdout.write(f"   COMPLETED:      {Inspection.objects.filter(status='COMPLETED').count()}")
@@ -926,6 +1063,8 @@ class Command(BaseCommand):
         self.stdout.write(f"   VOID:           {WarrantyRecord.objects.filter(status='VOID').count()}")
         self.stdout.write(f"📨 Sell Inquiries: {SellInquiry.objects.count()}")
         self.stdout.write(f"📩 Contact Req:    {ContactInquiry.objects.count()}")
+        self.stdout.write(f"⭐ Favorites:      {Favorite.objects.count()}")
+        self.stdout.write(f"🧾 Audit Logs:     {AuditLog.objects.count()}")
         self.stdout.write("─"*55)
         self.stdout.write("\n✅ Tài khoản test: admin1 / admin123")
         self.stdout.write("✅ Nhân viên:      admin_1..admin_3 / Test@12345")
@@ -934,6 +1073,8 @@ class Command(BaseCommand):
     # ── CLEAR ─────────────────────────────────────────────────────
 
     def clear_data(self):
+        AuditLog.objects.all().delete()
+        Favorite.objects.all().delete()
         WarrantyRecord.objects.all().delete()
         HandoverRecord.objects.all().delete()
         SalesOrder.objects.all().delete()

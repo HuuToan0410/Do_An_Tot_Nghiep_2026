@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
-
+from sales.audit_mixin import AuditLogMixin, log_action
 from vehicles.models import VehicleMedia, VehicleStatusLog, VehicleUnit
 from vehicles.permissions import (
     CanCreateVehicle,
@@ -108,11 +108,12 @@ class VehicleAdminListView(generics.ListAPIView):
         )
 
 
-class VehicleCreateView(generics.CreateAPIView):
+class VehicleCreateView(AuditLogMixin, generics.CreateAPIView):
     """Tạo hồ sơ xe mới — nhân viên thu mua."""
 
     serializer_class = VehicleCreateSerializer
     permission_classes = [CanCreateVehicle]
+    audit_model_name = "VehicleUnit"
 
     def perform_create(self, serializer):
         serializer.save()
@@ -192,6 +193,16 @@ class VehicleTransitionView(APIView):
             changed_by=request.user,
             note=note,
         )
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="VehicleUnit",
+            object_id=vehicle.id,
+            description=f"Xe {vehicle}: {old_status} → {new_status}",
+            old_value={"status": old_status},
+            new_value={"status": new_status},
+            request=request,
+        )
 
         return Response(
             {
@@ -199,6 +210,10 @@ class VehicleTransitionView(APIView):
                 "status": new_status,
             }
         )
+    
+
+    
+    
 
 
 class VehicleMediaUploadView(APIView):
@@ -313,10 +328,12 @@ class VehicleMediaDeleteView(APIView):
         )
 
 
-class VehicleAdminDetailView(generics.RetrieveUpdateDestroyAPIView):
+class VehicleAdminDetailView(AuditLogMixin, generics.RetrieveUpdateDestroyAPIView):
     queryset = VehicleUnit.objects.select_related("spec").prefetch_related(
         "media", "status_logs__changed_by"
     )
+    audit_model_name = "VehicleUnit"
+    audit_description_field = "__str__"
 
     def get_serializer_class(self):
         if self.request.method in ("PUT", "PATCH"):

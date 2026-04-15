@@ -5,7 +5,7 @@ from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from sales.audit_mixin import AuditLogMixin, log_action
 from refurbishment.models import RefurbishmentItem, RefurbishmentOrder
 from refurbishment.permissions import (
     CanCancelRefurbishment,
@@ -55,7 +55,7 @@ class RefurbishmentListView(generics.ListAPIView):
             raise
 
 
-class RefurbishmentCreateView(generics.CreateAPIView):
+class RefurbishmentCreateView(AuditLogMixin, generics.CreateAPIView):
     """
     Tạo lệnh tân trang mới — kỹ thuật viên tân trang, admin.
     Xe phải ở trạng thái WAIT_REFURBISH hoặc REFURBISHING.
@@ -63,9 +63,10 @@ class RefurbishmentCreateView(generics.CreateAPIView):
 
     serializer_class = RefurbishmentCreateSerializer
     permission_classes = [CanCreateRefurbishment]
+    audit_model_name = "RefurbishmentOrder"
 
 
-class RefurbishmentDetailView(generics.RetrieveUpdateAPIView):
+class RefurbishmentDetailView(AuditLogMixin, generics.RetrieveUpdateAPIView):
     """
     Chi tiết lệnh tân trang:
     - GET : nhân viên nội bộ
@@ -75,6 +76,7 @@ class RefurbishmentDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = RefurbishmentDetailSerializer
     permission_classes = [CanEditRefurbishment]
     queryset = RefurbishmentOrder.objects.prefetch_related("items")
+    audit_model_name = "RefurbishmentOrder"
 
     def get_object(self):
         obj = super().get_object()
@@ -112,7 +114,7 @@ class RefurbishmentItemView(APIView):
         )
 
 
-class RefurbishmentItemDetailView(generics.RetrieveUpdateDestroyAPIView):
+class RefurbishmentItemDetailView(AuditLogMixin, generics.RetrieveUpdateDestroyAPIView):
     """
     Xem / cập nhật / xóa hạng mục tân trang.
     Chặn thao tác nếu lệnh cha đã hoàn thành hoặc bị hủy.
@@ -121,6 +123,7 @@ class RefurbishmentItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = RefurbishmentItemSerializer
     permission_classes = [CanManageRefurbishmentItem]
     queryset = RefurbishmentItem.objects.select_related("order")
+    audit_model_name = "RefurbishmentItem"
 
     def get_object(self):
         obj = super().get_object()
@@ -167,11 +170,22 @@ class RefurbishmentCompleteView(APIView):
             )
 
         # ── Hoàn thành lệnh tân trang ──────────────────────────
+        old_status = order.status
         order.status = RefurbishmentOrder.Status.COMPLETED
         order.completed_date = timezone.now().date()
         order.approved_by = request.user
         order.save(
             update_fields=["status", "completed_date", "approved_by", "updated_at"]
+        )
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="RefurbishmentOrder",
+            object_id=order.pk,
+            description=f"Hoàn thành lệnh tân trang #{order.id}",
+            old_value={"status": old_status},
+            new_value={"status": "COMPLETED"},
+            request=request,
         )
 
         # ── Tự động chuyển trạng thái xe → READY_FOR_SALE ──────
@@ -187,6 +201,16 @@ class RefurbishmentCompleteView(APIView):
                 new_status="READY_FOR_SALE",
                 changed_by=request.user,
                 note=f"Tự động sau khi hoàn thành tân trang (lệnh #{order.id})",
+            )
+            log_action(
+                user=request.user,
+                action="STATUS_CHANGE",
+                model_name="VehicleUnit",
+                object_id=vehicle.id,
+                description=f"Xe #{vehicle.id}: {old_status} → READY_FOR_SALE",
+                old_value={"status": old_status},
+                new_value={"status": "READY_FOR_SALE"},
+                request=request,
             )
 
         return Response(
@@ -221,12 +245,21 @@ class RefurbishmentCancelView(APIView):
                 {"detail": "Lệnh tân trang đã bị hủy trước đó."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-
+        old_status = order.status
         order.status = RefurbishmentOrder.Status.CANCELLED
         if reason:
             order.note = f"[Hủy] {reason}\n{order.note}".strip()
         order.save(update_fields=["status", "note", "updated_at"])
-
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="RefurbishmentOrder",
+            object_id=order.pk,
+            description=f"Hủy lệnh tân trang #{order.id}",
+            old_value={"status": old_status},
+            new_value={"status": "CANCELLED"},
+            request=request,
+        )
         return Response({"message": "Đã hủy lệnh tân trang."})
 
 
@@ -254,9 +287,20 @@ class RefurbishmentStartView(APIView):
             )
 
         # update order
+        old_status = order.status
         order.status = RefurbishmentOrder.Status.IN_PROGRESS
         order.start_date = timezone.now().date()
         order.save(update_fields=["status", "start_date", "updated_at"])
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="RefurbishmentOrder",
+            object_id=order.pk,
+            description=f"Bắt đầu tân trang #{order.id}",
+            old_value={"status": old_status},
+            new_value={"status": "IN_PROGRESS"},
+            request=request,
+        )
 
         # update vehicle
         vehicle = order.vehicle
@@ -270,6 +314,16 @@ class RefurbishmentStartView(APIView):
             new_status="REFURBISHING",
             changed_by=request.user,
             note=f"Bắt đầu tân trang (lệnh #{order.id})",
+        )
+        log_action(
+            user=request.user,
+            action="STATUS_CHANGE",
+            model_name="VehicleUnit",
+            object_id=vehicle.id,
+            description=f"Xe #{vehicle.id}: {old_status} → REFURBISHING",
+            old_value={"status": old_status},
+            new_value={"status": "REFURBISHING"},
+            request=request,
         )
 
         return Response({"message": "Đã bắt đầu tân trang."})
